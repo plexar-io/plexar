@@ -1,18 +1,6 @@
 <div align="center">
 
-```
-                .     *     ✦     *     .
-           *           _______           *
-         .          .'         '.          .
-        *         .'    ◈   ◈    '.         *
-       .         |                 |         .
-       *         |   R E F L E X   |         *
-       .         |    ◈  ⎈  ◈     |         .
-        *         '.             .'         *
-         .          '._________.'          .
-           *                             *
-                .     *     .     *     .
-```
+# 🔭 Plexar
 
 **See further. Secure what matters.**
 
@@ -31,37 +19,37 @@ The security, compliance, and runtime intelligence layer for Kubernetes workload
 
 ## Why Plexar?
 
-Traditional scanners tell you *"this pod has 3 critical CVEs."*
+Traditional scanners tell you _"this pod has 3 critical CVEs."_
 
 Plexar tells you:
 
 > **"This pod has 3 critical CVEs, can reach your database, has cluster-admin RBAC, runs privileged, and has internet egress. The CVEs are loaded in memory at runtime. Fix this one first."**
 
-| | `payment-service` | `inventory-service` |
-|---|---|---|
-| **CVEs** | 3 Critical | 3 Critical |
-| **NetworkPolicy** | None | Applied |
-| **RBAC** | secret-reader | default SA |
-| **Reachable** | 8 svc + internet | 1 service |
-| **Runtime** | 3/3 in use | 0/3 in use |
-| **Plexar Score** | **92** Critical | **12** Low |
+|                   | `payment-service` | `inventory-service` |
+| ----------------- | ----------------- | ------------------- |
+| **CVEs**          | 3 Critical        | 3 Critical          |
+| **NetworkPolicy** | None              | Applied             |
+| **RBAC**          | secret-reader     | default SA          |
+| **Reachable**     | 8 svc + internet  | 1 service           |
+| **Runtime**       | 3/3 in use        | 0/3 in use          |
+| **Plexar Score**  | **92** Critical   | **12** Low          |
 
 Same CVEs. Completely different risk. **Plexar tells you which one to fix first.**
 
 ### What makes Plexar different
 
-| Capability | Trivy | Kubescape | Sysdig | **Plexar** |
-|---|:---:|:---:|:---:|:---:|
-| CVE scanning | Yes | Yes | Yes | **Yes** |
-| Runtime "in use" filtering | - | - | $$$ | **Yes** |
-| Attack path analysis | - | - | $$$ | **Yes** |
-| Compliance evidence vault | - | - | - | **Yes** |
-| SOC 2 / PCI DSS / HIPAA mapping | - | - | Partial | **Yes** |
-| EU CRA / EU AI Act reports | - | - | - | **Yes** |
-| Vanta / Drata integration | - | - | - | **Yes** |
-| Self-hosted | Yes | Partial | - | **Yes** |
-| MCP server (AI assistants) | - | Yes | - | **Yes** |
-| **Price** | Free | Freemium | $100k+/yr | **Free** |
+| Capability                      | Trivy | Kubescape |  Sysdig   | **Plexar** |
+| ------------------------------- | :---: | :-------: | :-------: | :--------: |
+| CVE scanning                    |  Yes  |    Yes    |    Yes    |  **Yes**   |
+| Runtime "in use" filtering      |   -   |     -     |    $$$    |  **Yes**   |
+| Attack path analysis            |   -   |     -     |    $$$    |  **Yes**   |
+| Compliance evidence vault       |   -   |     -     |     -     |  **Yes**   |
+| SOC 2 / PCI DSS / HIPAA mapping |   -   |     -     |  Partial  |  **Yes**   |
+| EU CRA / EU AI Act reports      |   -   |     -     |     -     |  **Yes**   |
+| Vanta / Drata integration       |   -   |     -     |     -     |  **Yes**   |
+| Self-hosted                     |  Yes  |  Partial  |     -     |  **Yes**   |
+| MCP server (AI assistants)      |   -   |    Yes    |     -     |  **Yes**   |
+| **Price**                       | Free  | Freemium  | $100k+/yr |  **Free**  |
 
 ---
 
@@ -153,12 +141,12 @@ Score = CVE Severity (30) + Blast Radius (25) + Policy Gap (20) + Permissions (1
       × Workload Risk Multiplier
 ```
 
-| Score | Tier | Action |
-|:---:|---|---|
+| Score  | Tier         | Action                            |
+| :----: | ------------ | --------------------------------- |
 | 75–100 | **Critical** | Fix now — active exploitable risk |
-| 50–74 | **High** | Fix soon — significant exposure |
-| 30–49 | **Medium** | Plan — needs attention |
-| 0–29 | **Low** | Monitor — good posture |
+| 50–74  | **High**     | Fix soon — significant exposure   |
+| 30–49  | **Medium**   | Plan — needs attention            |
+|  0–29  | **Low**      | Monitor — good posture            |
 
 ### Runtime "In Use" CVE Detection
 
@@ -170,7 +158,7 @@ Plexar reads `/proc/<pid>/maps` and `/proc/<pid>/fd` to identify which packages 
 - **Go/Rust detection** — identifies statically-linked binaries via ELF headers
 - **~95% noise reduction** — only in-use CVEs bubble to the top
 
-> *Sysdig charges $100k+/yr for this. Plexar does it free, self-hosted.*
+> _Sysdig charges $100k+/yr for this. Plexar does it free, self-hosted._
 
 ### Attack Path Analysis
 
@@ -194,11 +182,11 @@ internet ──network_reach──▶ api-gateway ──rbac_escalate──▶ c
 
 Import findings from external scanners and normalize into Plexar's unified model:
 
-| Source | Format | What's extracted |
-|---|---|---|
-| **Kubescape** | JSON | Controls, pass/fail/warn, resource findings |
-| **Kyverno** | PolicyReport JSON | Policy results, severity, category |
-| **Trivy SBOM** | CycloneDX / SPDX JSON | Components, packages, vulnerabilities |
+| Source         | Format                | What's extracted                            |
+| -------------- | --------------------- | ------------------------------------------- |
+| **Kubescape**  | JSON                  | Controls, pass/fail/warn, resource findings |
+| **Kyverno**    | PolicyReport JSON     | Policy results, severity, category          |
+| **Trivy SBOM** | CycloneDX / SPDX JSON | Components, packages, vulnerabilities       |
 
 ```bash
 ◈ plexar ingest --source kubescape --file report.json
@@ -221,33 +209,33 @@ Push compliance evidence to external storage automatically after each scan:
 
 Automatic classification of **14 workload types** with risk multipliers:
 
-| Class | Multiplier | | Class | Multiplier |
-|---|:---:|---|---|:---:|
-| Auth Service | ×1.50 | | API Gateway | ×1.30 |
-| Payment Service | ×1.50 | | Search Engine | ×1.30 |
-| Secret Manager | ×1.50 | | Cache / Redis | ×1.25 |
-| Database | ×1.40 | | Object Storage | ×1.25 |
-| CI/CD Pipeline | ×1.40 | | Message Queue | ×1.20 |
-| ML / AI Workload | ×1.35 | | General App | ×1.00 |
-| LLM Inference | ×1.60 | | Monitoring | ×0.85 |
+| Class            | Multiplier |     | Class          | Multiplier |
+| ---------------- | :--------: | --- | -------------- | :--------: |
+| Auth Service     |   ×1.50    |     | API Gateway    |   ×1.30    |
+| Payment Service  |   ×1.50    |     | Search Engine  |   ×1.30    |
+| Secret Manager   |   ×1.50    |     | Cache / Redis  |   ×1.25    |
+| Database         |   ×1.40    |     | Object Storage |   ×1.25    |
+| CI/CD Pipeline   |   ×1.40    |     | Message Queue  |   ×1.20    |
+| ML / AI Workload |   ×1.35    |     | General App    |   ×1.00    |
+| LLM Inference    |   ×1.60    |     | Monitoring     |   ×0.85    |
 
 ### Web Dashboard (11 pages)
 
 Embedded in the binary — no separate frontend build. Served at `http://localhost:8080`.
 
-| Page | Description |
-|---|---|
-| **Dashboard** | Cluster risk score, pod counts, CVE stats, compliance sparkline |
-| **Topology** | Interactive blast radius map with network lines |
-| **Pods** | Full pod table with class, multiplier, CVEs, reachability |
-| **Compliance** | Tabbed framework view with scores, findings, remediation |
-| **RBAC Audit** | Cluster-admin, wildcard, exec, secret flags with filtering |
-| **Evidence Vault** | Hash chain integrity, drift timeline, control pass rates |
-| **Integrations** | Vanta/Drata provider cards and push history |
-| **Alerts** | Alert rules, destinations, recent events |
-| **Runtime Insights** | In Use vs Dormant CVEs, per-pod charts, confidence scores |
-| **Attack Paths** | Path visualization with node chains, edge details, remediation |
-| **Settings** | Scoring weights, scan configuration |
+| Page                 | Description                                                     |
+| -------------------- | --------------------------------------------------------------- |
+| **Dashboard**        | Cluster risk score, pod counts, CVE stats, compliance sparkline |
+| **Topology**         | Interactive blast radius map with network lines                 |
+| **Pods**             | Full pod table with class, multiplier, CVEs, reachability       |
+| **Compliance**       | Tabbed framework view with scores, findings, remediation        |
+| **RBAC Audit**       | Cluster-admin, wildcard, exec, secret flags with filtering      |
+| **Evidence Vault**   | Hash chain integrity, drift timeline, control pass rates        |
+| **Integrations**     | Vanta/Drata provider cards and push history                     |
+| **Alerts**           | Alert rules, destinations, recent events                        |
+| **Runtime Insights** | In Use vs Dormant CVEs, per-pod charts, confidence scores       |
+| **Attack Paths**     | Path visualization with node chains, edge details, remediation  |
+| **Settings**         | Scoring weights, scan configuration                             |
 
 ---
 
@@ -259,18 +247,18 @@ Embedded in the binary — no separate frontend build. Served at `http://localho
 ◈ plexar scan -n production -o soc2-report.pdf
 ```
 
-| Control | Name | What Plexar Assesses |
-|---|---|---|
-| CC3.1 | Risk Identification | Pod risk tiers, blast radius scores |
-| CC3.2 | Risk Assessment of Changes | Drift detection, snapshot deltas |
-| CC3.4 | Fraud & Unauthorized Activity | Privileged containers, cluster-admin RBAC |
-| CC6.1 | Logical Access Controls | NetworkPolicy coverage |
-| CC6.3 | Least Privilege | RBAC audit: privileged, root, exec, secrets |
-| CC6.6 | Network Security | Internet egress, segmentation |
-| CC7.1 | Detection of Unauthorized Activities | Real-time scanning, alerting |
-| CC8.1 | Vulnerability Remediation | Critical CVE counts, fixable CVEs |
-| C1.1 | Confidential Info Protection | Env secrets, RBAC secret access |
-| | *...and 11 more controls* | |
+| Control | Name                                 | What Plexar Assesses                        |
+| ------- | ------------------------------------ | ------------------------------------------- |
+| CC3.1   | Risk Identification                  | Pod risk tiers, blast radius scores         |
+| CC3.2   | Risk Assessment of Changes           | Drift detection, snapshot deltas            |
+| CC3.4   | Fraud & Unauthorized Activity        | Privileged containers, cluster-admin RBAC   |
+| CC6.1   | Logical Access Controls              | NetworkPolicy coverage                      |
+| CC6.3   | Least Privilege                      | RBAC audit: privileged, root, exec, secrets |
+| CC6.6   | Network Security                     | Internet egress, segmentation               |
+| CC7.1   | Detection of Unauthorized Activities | Real-time scanning, alerting                |
+| CC8.1   | Vulnerability Remediation            | Critical CVE counts, fixable CVEs           |
+| C1.1    | Confidential Info Protection         | Env secrets, RBAC secret access             |
+|         | _...and 11 more controls_            |                                             |
 
 ### EU Cyber Resilience Act (CRA)
 
@@ -280,16 +268,16 @@ Maps to **Regulation (EU) 2024/2847 Article 13** requirements:
 ◈ plexar scan -n production    # EU CRA included in compliance output
 ```
 
-| Control | Article 13 Requirement |
-|---|---|
+| Control  | Article 13 Requirement                                    |
+| -------- | --------------------------------------------------------- |
 | CRA-13.1 | Security by design — no known exploitable vulnerabilities |
-| CRA-13.2 | Secure default configuration |
-| CRA-13.3 | Security updates and patch management |
-| CRA-13.4 | Access control and authentication |
-| CRA-13.5 | Confidentiality and integrity of data |
-| CRA-13.6 | Minimal data processing and attack surface |
-| CRA-13.7 | Availability and resilience |
-| CRA-13.8 | Logging, monitoring, and audit trails |
+| CRA-13.2 | Secure default configuration                              |
+| CRA-13.3 | Security updates and patch management                     |
+| CRA-13.4 | Access control and authentication                         |
+| CRA-13.5 | Confidentiality and integrity of data                     |
+| CRA-13.6 | Minimal data processing and attack surface                |
+| CRA-13.7 | Availability and resilience                               |
+| CRA-13.8 | Logging, monitoring, and audit trails                     |
 
 ### EU AI Act Annex IV
 
@@ -341,14 +329,14 @@ Also supports **PagerDuty** (Events API v2) and **Jira** (auto-created tickets).
 }
 ```
 
-| Tool | Description |
-|---|---|
-| `scan_namespace` | Full blast radius scan |
-| `get_pod_risk` | Per-pod risk breakdown |
-| `check_compliance` | SOC 2 / EU CRA assessment |
-| `classify_workloads` | Workload classification |
-| `find_critical_cves` | Critical/high CVEs |
-| `audit_rbac` | RBAC permission audit |
+| Tool                 | Description               |
+| -------------------- | ------------------------- |
+| `scan_namespace`     | Full blast radius scan    |
+| `get_pod_risk`       | Per-pod risk breakdown    |
+| `check_compliance`   | SOC 2 / EU CRA assessment |
+| `classify_workloads` | Workload classification   |
+| `find_critical_cves` | Critical/high CVEs        |
+| `audit_rbac`         | RBAC permission audit     |
 
 ### Evidence Sinks
 
@@ -364,34 +352,34 @@ Also supports **PagerDuty** (Events API v2) and **Jira** (auto-created tickets).
 
 All endpoints available when running `◈ plexar serve`:
 
-| Endpoint | Method | Description |
-|---|:---:|---|
-| `/api/scan` | GET | Run scan, return full results |
-| `/api/compliance` | GET | All compliance framework results |
-| `/api/compliance/framework?name=` | GET | Single framework (soc2, eu-cra, pci-dss, hipaa, cis) |
-| `/api/ingest?source=` | POST | Ingest external scanner data (kubescape, kyverno, trivy-sbom) |
-| `/api/rbac` | GET | RBAC audit findings |
-| `/api/runtime` | GET | Runtime in-use insights, noise reduction, profiles |
-| `/api/attackpath` | GET | Attack path analysis with remediation |
-| `/api/history` | GET | Historical scan snapshots |
-| `/api/history/latest` | GET | Most recent snapshot |
-| `/api/history/delta` | GET | Delta between last two snapshots |
-| `/api/evidence` | GET | Evidence vault records (filterable) |
-| `/api/evidence/summary` | GET | Control pass rates over time |
-| `/api/evidence/drift` | GET | Drift events (filterable by severity) |
-| `/api/evidence/verify` | GET | Hash chain integrity check |
-| `/api/evidence/sinks` | GET | Configured evidence sinks status |
-| `/api/alerts` | GET | Alert rules |
-| `/api/alerts/events` | GET | Recent alert events |
-| `/api/integrations` | GET | Vanta/Drata provider status |
-| `/api/generate/netpol` | GET | NetworkPolicy suggestions |
-| `/api/namespaces` | GET | Scannable namespaces |
-| `/api/export/csv` | GET | CSV download |
-| `/api/settings/weights` | GET | Scoring weights |
-| `/api/meta` | GET | Server version and config |
-| `/healthz` | GET | Liveness probe |
-| `/readyz` | GET | Readiness probe |
-| `/metrics` | GET | Prometheus metrics (port 9090) |
+| Endpoint                          | Method | Description                                                   |
+| --------------------------------- | :----: | ------------------------------------------------------------- |
+| `/api/scan`                       |  GET   | Run scan, return full results                                 |
+| `/api/compliance`                 |  GET   | All compliance framework results                              |
+| `/api/compliance/framework?name=` |  GET   | Single framework (soc2, eu-cra, pci-dss, hipaa, cis)          |
+| `/api/ingest?source=`             |  POST  | Ingest external scanner data (kubescape, kyverno, trivy-sbom) |
+| `/api/rbac`                       |  GET   | RBAC audit findings                                           |
+| `/api/runtime`                    |  GET   | Runtime in-use insights, noise reduction, profiles            |
+| `/api/attackpath`                 |  GET   | Attack path analysis with remediation                         |
+| `/api/history`                    |  GET   | Historical scan snapshots                                     |
+| `/api/history/latest`             |  GET   | Most recent snapshot                                          |
+| `/api/history/delta`              |  GET   | Delta between last two snapshots                              |
+| `/api/evidence`                   |  GET   | Evidence vault records (filterable)                           |
+| `/api/evidence/summary`           |  GET   | Control pass rates over time                                  |
+| `/api/evidence/drift`             |  GET   | Drift events (filterable by severity)                         |
+| `/api/evidence/verify`            |  GET   | Hash chain integrity check                                    |
+| `/api/evidence/sinks`             |  GET   | Configured evidence sinks status                              |
+| `/api/alerts`                     |  GET   | Alert rules                                                   |
+| `/api/alerts/events`              |  GET   | Recent alert events                                           |
+| `/api/integrations`               |  GET   | Vanta/Drata provider status                                   |
+| `/api/generate/netpol`            |  GET   | NetworkPolicy suggestions                                     |
+| `/api/namespaces`                 |  GET   | Scannable namespaces                                          |
+| `/api/export/csv`                 |  GET   | CSV download                                                  |
+| `/api/settings/weights`           |  GET   | Scoring weights                                               |
+| `/api/meta`                       |  GET   | Server version and config                                     |
+| `/healthz`                        |  GET   | Liveness probe                                                |
+| `/readyz`                         |  GET   | Readiness probe                                               |
+| `/metrics`                        |  GET   | Prometheus metrics (port 9090)                                |
 
 ---
 
@@ -487,7 +475,7 @@ reflex/
 
 - **Kubernetes cluster** — or use `./demo/setup.sh` to create one with kind
 - **kubectl** — configured with cluster access
-- **Trivy** *(optional)* — for CVE scanning. Not required with `--vuln-source trivy-operator` or `--vuln-source none`
+- **Trivy** _(optional)_ — for CVE scanning. Not required with `--vuln-source trivy-operator` or `--vuln-source none`
 
 ---
 
