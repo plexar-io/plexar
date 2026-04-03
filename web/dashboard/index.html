@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reflex — Kubernetes Blast Radius Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0a1929;
+    --bg-card: #0d2137;
+    --bg-card-hover: #132f4c;
+    --bg-surface: #071318;
+    --border: #1e3a5f;
+    --border-light: #173a5e;
+    --primary: #1976d2;
+    --primary-light: #42a5f5;
+    --primary-dark: #1565c0;
+    --primary-bg: rgba(25,118,210,0.08);
+    --primary-bg-hover: rgba(25,118,210,0.16);
+    --text-primary: #e3e8ef;
+    --text-secondary: #8796a5;
+    --text-disabled: #5a6a7a;
+    --error: #f44336;
+    --error-light: #ef5350;
+    --error-bg: rgba(244,67,54,0.08);
+    --warning: #ffa726;
+    --warning-bg: rgba(255,167,38,0.08);
+    --success: #66bb6a;
+    --success-bg: rgba(102,187,106,0.08);
+    --info: #29b6f6;
+    --info-bg: rgba(41,182,246,0.08);
+    --purple: #ab47bc;
+    --purple-bg: rgba(171,71,188,0.08);
+    --shadow: 0 2px 8px rgba(0,0,0,0.32);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --sidebar-w: 240px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Roboto', sans-serif;
+    background: var(--bg-primary); color: var(--text-primary);
+    min-height: 100vh; display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mi { font-family: 'Material Icons Outlined'; font-size: 20px; vertical-align: middle; font-style: normal; }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    width: var(--sidebar-w); min-height: 100vh;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+  }
+  .sidebar-brand {
+    padding: 20px 20px; display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: #fff;
+    box-shadow: 0 2px 8px rgba(25,118,210,0.3);
+  }
+  .sidebar-brand .name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .sidebar-brand .edition { font-size: 10px; color: var(--text-disabled); display: block; text-transform: uppercase; letter-spacing: 1px; }
+
+  .sidebar-nav { padding: 8px 0; flex: 1; overflow-y: auto; }
+  .nav-section {
+    padding: 16px 20px 6px; font-size: 11px; font-weight: 500;
+    color: var(--text-disabled); text-transform: uppercase; letter-spacing: 1.2px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 20px; font-size: 14px; font-weight: 400; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.2s; border-radius: 0;
+    margin: 1px 8px; border-radius: var(--radius-sm);
+  }
+  .nav-item:hover { background: var(--primary-bg); color: var(--text-primary); }
+  .nav-item.active { background: var(--primary-bg-hover); color: var(--primary-light); font-weight: 500; }
+  .nav-item .mi { font-size: 20px; width: 24px; text-align: center; }
+  .nav-item .badge {
+    margin-left: auto; background: var(--error-bg); color: var(--error-light);
+    padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+  }
+
+  .sidebar-footer {
+    padding: 16px 20px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-disabled); line-height: 1.6;
+  }
+  .sidebar-footer .cluster-name { color: var(--primary-light); font-weight: 500; }
+
+  /* ─── Main Content ─── */
+  .content { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; }
+
+  .topbar {
+    background: var(--bg-surface); border-bottom: 1px solid var(--border);
+    padding: 14px 32px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.2px; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .chip {
+    padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip-info { background: var(--primary-bg); color: var(--primary-light); }
+  .chip-error { background: var(--error-bg); color: var(--error-light); }
+  .chip-success { background: var(--success-bg); color: var(--success); }
+
+  .btn {
+    padding: 8px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-primary); transition: all 0.2s; font-family: 'Roboto', sans-serif;
+    letter-spacing: 0.2px;
+  }
+  .btn:hover { background: var(--bg-card-hover); border-color: var(--primary); }
+  .btn-primary {
+    background: var(--primary); border-color: var(--primary); color: #fff;
+    box-shadow: 0 2px 6px rgba(25,118,210,0.25);
+  }
+  .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(25,118,210,0.35); }
+
+  .page-content { padding: 24px 32px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ─── Cards ─── */
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    box-shadow: var(--shadow); transition: box-shadow 0.2s;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .card-header h2 {
+    font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  /* ─── Grid Layouts ─── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+
+  /* ─── Stat Cards ─── */
+  .stat-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+    position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%; border-radius: 4px 0 0 4px;
+  }
+  .stat-card.accent-blue::before { background: var(--primary-light); }
+  .stat-card.accent-warning::before { background: var(--warning); }
+  .stat-card.accent-error::before { background: var(--error); }
+  .stat-card.accent-success::before { background: var(--success); }
+  .stat-card .stat-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .stat-card .stat-icon.blue { background: var(--primary-bg); color: var(--primary-light); }
+  .stat-card .stat-icon.orange { background: var(--warning-bg); color: var(--warning); }
+  .stat-card .stat-icon.red { background: var(--error-bg); color: var(--error-light); }
+  .stat-card .stat-icon.green { background: var(--success-bg); color: var(--success); }
+  .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; letter-spacing: 0.3px; }
+  .stat-value { font-size: 36px; font-weight: 700; margin: 6px 0 4px; letter-spacing: -1px; }
+  .stat-sub { font-size: 18px; font-weight: 300; color: var(--text-secondary); }
+  .stat-change { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .stat-change .mi { font-size: 16px; }
+  .stat-change.up { color: var(--error-light); }
+  .stat-change.down { color: var(--success); }
+
+  .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 12px; }
+  .sparkline .bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 5px; transition: height 0.3s; }
+
+  /* ─── Network Graph ─── */
+  .graph-container {
+    height: 480px; position: relative;
+    background: radial-gradient(ellipse at center, #0d2a4a 0%, var(--bg-primary) 70%);
+    border-radius: var(--radius-sm); overflow: hidden;
+  }
+  .graph-node {
+    position: absolute; padding: 8px 14px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid; z-index: 2; backdrop-filter: blur(4px);
+  }
+  .graph-node:hover { transform: scale(1.1); z-index: 10; }
+  .graph-node.critical { background: rgba(244,67,54,0.12); border-color: var(--error); color: var(--error-light); }
+  .graph-node.high { background: rgba(255,167,38,0.12); border-color: var(--warning); color: var(--warning); }
+  .graph-node.medium { background: var(--primary-bg); border-color: var(--primary-light); color: var(--primary-light); }
+  .graph-node.low { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+  .graph-node.internet { background: var(--purple-bg); border-color: var(--purple); color: var(--purple); }
+  .graph-node.dimmed { opacity: 0.12; }
+  .graph-node .score-tiny { font-size: 10px; opacity: 0.7; margin-left: 4px; }
+  .graph-node .node-ports { font-size: 9px; opacity: 0.5; display: block; margin-top: 2px; }
+  svg.graph-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .graph-legend {
+    position: absolute; bottom: 12px; left: 12px;
+    display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); z-index: 3;
+  }
+  .graph-legend span { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend-line { width: 20px; height: 2px; border-radius: 1px; }
+  .graph-controls { display: flex; gap: 8px; margin-bottom: 12px; }
+  .graph-btn {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-secondary); transition: all 0.2s; font-family: 'Roboto', sans-serif;
+  }
+  .graph-btn.active { background: var(--primary-bg-hover); border-color: var(--primary); color: var(--primary-light); }
+  .graph-btn:hover { border-color: var(--primary-light); }
+
+  /* ─── Tables ─── */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th {
+    text-align: left; font-size: 11px; font-weight: 500; color: var(--text-disabled);
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .data-table td {
+    padding: 12px 14px; font-size: 13px;
+    border-bottom: 1px solid rgba(30,58,95,0.4);
+  }
+  .data-table tr { transition: background 0.15s; }
+  .data-table tr:hover td { background: var(--primary-bg); }
+  .sev-critical { color: var(--error-light); font-weight: 500; }
+  .sev-high { color: var(--warning); font-weight: 500; }
+  .sev-medium { color: var(--primary-light); }
+  .sev-low { color: var(--success); }
+
+  /* ─── Badges ─── */
+  .badge-sm {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;
+    display: inline-block; letter-spacing: 0.3px;
+  }
+  .badge-critical { background: var(--error-bg); color: var(--error-light); }
+  .badge-high { background: var(--warning-bg); color: var(--warning); }
+  .badge-medium { background: var(--primary-bg); color: var(--primary-light); }
+  .badge-low { background: var(--success-bg); color: var(--success); }
+  .badge-pass { background: var(--success-bg); color: var(--success); }
+  .badge-fail { background: var(--error-bg); color: var(--error-light); }
+  .badge-warn { background: var(--warning-bg); color: var(--warning); }
+
+  /* ─── Blast Radius Items ─── */
+  .blast-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; margin-bottom: 4px;
+    background: rgba(13,33,55,0.6); border-radius: var(--radius-sm);
+    font-size: 13px; border: 1px solid transparent;
+    transition: border-color 0.15s;
+  }
+  .blast-item:hover { border-color: var(--border); }
+  .blast-item .mi { font-size: 18px; width: 24px; text-align: center; }
+  .blast-item .target { flex: 1; }
+  .blast-item .tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .tag-danger { background: var(--error-bg); color: var(--error-light); }
+  .tag-warning { background: var(--warning-bg); color: var(--warning); }
+  .tag-info { background: var(--primary-bg); color: var(--primary-light); }
+
+  /* ─── Compliance ─── */
+  .compliance-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow);
+  }
+  .compliance-card .framework-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .compliance-card .framework-name { font-size: 18px; font-weight: 500; }
+  .compliance-card .framework-score { font-size: 32px; font-weight: 700; }
+  .compliance-bar {
+    height: 6px; background: rgba(30,58,95,0.5); border-radius: 3px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .compliance-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s; }
+  .compliance-checks { display: flex; flex-direction: column; gap: 6px; }
+  .compliance-check {
+    display: flex; align-items: center; gap: 10px; font-size: 13px;
+    padding: 8px 12px; background: rgba(13,33,55,0.6); border-radius: var(--radius-sm);
+  }
+  .compliance-check .mi { font-size: 18px; width: 20px; text-align: center; }
+
+  /* ─── Alerts ─── */
+  .alert-rule {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; background: rgba(13,33,55,0.6); border-radius: var(--radius-sm);
+    margin-bottom: 8px; border: 1px solid transparent; transition: border-color 0.15s;
+  }
+  .alert-rule:hover { border-color: var(--border); }
+  .alert-rule .mi { font-size: 22px; }
+  .alert-rule .rule-info { flex: 1; }
+  .alert-rule .rule-name { font-size: 14px; font-weight: 500; }
+  .alert-rule .rule-desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+  .toggle {
+    width: 40px; height: 22px; border-radius: 11px;
+    background: var(--border); position: relative; cursor: pointer;
+    transition: background 0.25s;
+  }
+  .toggle.on { background: var(--primary); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: left 0.25s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.on::after { left: 21px; }
+
+  /* ─── Activity ─── */
+  .activity-item {
+    display: flex; gap: 12px; padding: 12px 0;
+    border-bottom: 1px solid rgba(30,58,95,0.3); font-size: 13px;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-dot {
+    width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0;
+  }
+  .activity-time { color: var(--text-disabled); font-size: 11px; margin-top: 3px; }
+
+  /* ─── Tabs ─── */
+  .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+  .tab {
+    padding: 12px 20px; font-size: 14px; font-weight: 500; color: var(--text-secondary);
+    cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+    margin-bottom: -2px;
+  }
+  .tab:hover { color: var(--text-primary); }
+  .tab.active { color: var(--primary-light); border-bottom-color: var(--primary-light); }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ─── Detail Panel ─── */
+  .detail-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section h4 {
+    font-size: 12px; font-weight: 500; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══ -->
+<div class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">R</div>
+    <div>
+      <span class="name">Reflex</span>
+      <span class="edition" id="sidebar-edition">Enterprise</span>
+    </div>
+  </div>
+  
+  <div class="sidebar-nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="mi">dashboard</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showPage('topology')">
+      <span class="mi">hub</span> Topology
+    </div>
+    <div class="nav-item" onclick="showPage('pods')">
+      <span class="mi">dns</span> Pods
+      <span class="badge" id="badge-critical-pods">0</span>
+    </div>
+    
+    <div class="nav-section">Security</div>
+    <div class="nav-item" onclick="showPage('compliance')">
+      <span class="mi">verified_user</span> Compliance
+    </div>
+    <div class="nav-item" onclick="showPage('rbac')">
+      <span class="mi">admin_panel_settings</span> RBAC
+      <span class="badge" id="badge-rbac-crit">0</span>
+    </div>
+    <div class="nav-item" onclick="showPage('alerts')">
+      <span class="mi">notifications</span> Alerts
+      <span class="badge" id="badge-alert-count">0</span>
+    </div>
+    <div class="nav-item" onclick="showPage('runtime')">
+      <span class="mi">memory</span> Runtime Insights
+    </div>
+    <div class="nav-item" onclick="showPage('attackpath')">
+      <span class="mi">route</span> Attack Paths
+      <span class="badge" id="badge-attack-crit">0</span>
+    </div>
+    
+    <div class="nav-section">Evidence</div>
+    <div class="nav-item" onclick="showPage('evidence')">
+      <span class="mi">fact_check</span> Evidence Vault
+    </div>
+    <div class="nav-item" onclick="showPage('integrations')">
+      <span class="mi">cloud_sync</span> Integrations
+    </div>
+    
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="showPage('settings')">
+      <span class="mi">settings</span> Settings
+    </div>
+  </div>
+  
+  <div class="sidebar-footer" id="sidebar-footer">
+    Cluster: <span class="cluster-name">connecting...</span><br>
+    Loading...
+  </div>
+</div>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="content">
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: DASHBOARD                -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page active" id="page-dashboard">
+    <div class="topbar">
+      <h1>Dashboard</h1>
+      <div class="topbar-right">
+        <div class="chip chip-error" id="chip-alerts"><span class="mi" style="font-size:16px">warning</span> <span id="chip-alerts-text">0 alerts</span></div>
+        <div class="chip chip-info" id="chip-scan-time"><span class="mi" style="font-size:16px">schedule</span> <span id="chip-scan-text">Scanning...</span></div>
+        <button class="btn btn-primary" onclick="exportPDF()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">download</span> Export Report</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="dash-stats"></div>
+      <div class="grid-2" style="margin-bottom:18px">
+        <div class="card">
+          <div class="card-header">
+            <h2>Highest Blast Radius Pods</h2>
+            <div class="card-actions"><button class="btn" onclick="showPage('pods')">View All</button></div>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>#</th><th>Pod</th><th>Class</th><th>CVEs</th><th>Reach</th><th>Score</th><th>Risk</th></tr></thead>
+            <tbody id="dash-top-pods"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h2>Activity Feed</h2>
+            <div class="card-actions"><button class="btn" onclick="showPage('alerts')">View All</button></div>
+          </div>
+          <div id="dash-activity"><div style="color:var(--text-secondary);padding:16px;font-size:13px">No recent events</div></div>
+        </div>
+      </div>
+      <div class="grid-3" id="dash-compliance"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: TOPOLOGY                 -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-topology">
+    <div class="topbar">
+      <h1>Network Topology</h1>
+      <div class="topbar-right">
+        <select class="btn" style="appearance:auto" id="topo-ns-filter" onchange="fetchAll()"></select>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><h2>Blast Radius Map</h2></div>
+        <div class="graph-controls">
+          <button class="graph-btn active" onclick="setView('configured')" id="btn-configured">Configured Dependencies</button>
+          <button class="graph-btn" onclick="setView('actual')" id="btn-actual">Actual Access (No NetPol)</button>
+          <button class="graph-btn" onclick="setView('selected')" id="btn-selected">Selected Pod Blast Radius</button>
+        </div>
+        <div class="graph-container" id="graph">
+          <svg class="graph-lines" id="graphLines">
+            <defs>
+              <marker id="arrow-configured" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#42a5f5"/></marker>
+              <marker id="arrow-danger" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ef5350"/></marker>
+              <marker id="arrow-internet" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ab47bc"/></marker>
+            </defs>
+          </svg>
+          <div id="graph-nodes"></div>
+          <div class="graph-legend">
+            <span><div class="legend-line" style="background:var(--primary-light)"></div> Configured</span>
+            <span><div class="legend-line" style="background:var(--error-light);opacity:0.4"></div> Unrestricted</span>
+            <span><div class="legend-line" style="background:var(--purple)"></div> Internet</span>
+            <span><div class="legend-dot" style="background:var(--success)"></div> Low</span>
+            <span><div class="legend-dot" style="background:var(--primary-light)"></div> Medium</span>
+            <span><div class="legend-dot" style="background:var(--warning)"></div> High</span>
+            <span><div class="legend-dot" style="background:var(--error)"></div> Critical</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="topo-detail" style="display:none">
+        <div class="card-header">
+          <h2 id="topo-detail-title">Select a pod</h2>
+          <div class="card-actions"><span class="badge-sm badge-critical" id="topo-detail-score" style="font-size:18px;padding:4px 14px"></span></div>
+        </div>
+        <div class="detail-cols">
+          <div><div class="detail-section"><h4>Blast Radius &mdash; If Exploited, Attacker Reaches:</h4><div id="topo-blast-list"></div></div></div>
+          <div><div class="detail-section"><h4>Top CVEs</h4><table class="data-table"><thead><tr><th>CVE</th><th>Severity</th><th>CVSS</th><th>Package</th></tr></thead><tbody id="topo-cve-list"></tbody></table></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: PODS                     -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-pods">
+    <div class="topbar">
+      <h1>Pods</h1>
+      <div class="topbar-right">
+        <select class="btn" style="appearance:auto" id="pods-risk-filter" onchange="renderPods()">
+          <option value="all">All Risk Levels</option>
+          <option value="critical">Critical only</option>
+          <option value="high">High + Critical</option>
+        </select>
+        <select class="btn" style="appearance:auto" id="pods-ns-filter" onchange="renderPods()"></select>
+        <button class="btn" onclick="exportCSV()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">download</span> Export CSV</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="card">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Pod</th><th>Namespace</th><th>Class</th><th>Image</th><th>Critical</th><th>High</th><th>Reachable</th><th>Internet</th><th>NetPol</th><th>Score</th><th>Risk</th></tr></thead>
+          <tbody id="pods-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: COMPLIANCE               -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-compliance">
+    <div class="topbar">
+      <h1>Compliance</h1>
+      <div class="topbar-right">
+        <button class="btn" onclick="exportPDF()">Download PDF Report</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="tab-bar" id="compliance-tabs"></div>
+      <div class="grid-2" style="margin-bottom:18px" id="compliance-stats"></div>
+      <div class="card">
+        <div class="card-header"><h2 id="compliance-table-title">Controls Status</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Control</th><th>Name</th><th>Status</th><th>Score</th><th>Violations</th><th></th></tr></thead>
+          <tbody id="compliance-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: ALERTS                   -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-alerts">
+    <div class="topbar">
+      <h1>Alerts</h1>
+    </div>
+    <div class="page-content">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><h2>Alert Rules</h2></div>
+          <div id="alert-rules-list"></div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h2>Destinations</h2></div>
+            <div id="alert-destinations-list">
+              <div style="color:var(--text-secondary);padding:16px;font-size:13px">Configure via CLI flags (--alert-slack-url, etc.)</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Recent Alert Events</h2></div>
+            <div id="alert-events-list"><div style="color:var(--text-secondary);padding:16px;font-size:13px">No recent events</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: RBAC                     -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-rbac">
+    <div class="topbar">
+      <h1>RBAC Audit</h1>
+      <div class="topbar-right">
+        <select class="btn" style="appearance:auto" id="rbac-risk-filter" onchange="renderRBAC()">
+          <option value="all">All Risk Levels</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="rbac-stats"></div>
+      <div class="card">
+        <div class="card-header"><h2>RBAC Findings by Pod</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Pod</th><th>Service Account</th><th>Risk</th><th>Score</th><th>Flags</th><th>Details</th></tr></thead>
+          <tbody id="rbac-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: EVIDENCE VAULT           -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-evidence">
+    <div class="topbar">
+      <h1>Evidence Vault</h1>
+      <div class="topbar-right">
+        <button class="btn" onclick="verifyChain()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">verified</span> Verify Chain</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="evidence-stats"></div>
+      <div class="grid-2" style="margin-bottom:18px">
+        <div class="card">
+          <div class="card-header"><h2>Drift Timeline</h2></div>
+          <div id="drift-timeline" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Control Pass Rates</h2></div>
+          <div id="evidence-controls" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Recent Evidence Records</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Cluster Score</th><th>Pods</th><th>Critical</th><th>NetPol %</th><th>Hash</th></tr></thead>
+          <tbody id="evidence-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: INTEGRATIONS             -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-integrations">
+    <div class="topbar"><h1>Integrations</h1></div>
+    <div class="page-content">
+      <div class="grid-2" style="margin-bottom:18px" id="integrations-providers"></div>
+      <div class="card">
+        <div class="card-header"><h2>Push History</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Provider</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
+          <tbody id="integrations-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: RUNTIME INSIGHTS         -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-runtime">
+    <div class="topbar">
+      <h1>Runtime Insights — In Use Detection</h1>
+      <div class="topbar-right">
+        <span class="chip chip-info" id="runtime-noise-chip">Analyzing...</span>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="runtime-stats"></div>
+      <div class="grid-2" style="margin-bottom:18px">
+        <div class="card">
+          <div class="card-header"><h2>In Use vs Dormant CVEs by Pod</h2></div>
+          <div id="runtime-pod-bars" style="display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Runtime Profiles</h2></div>
+          <div id="runtime-profiles" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;font-size:12px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>In Use CVE Details</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Pod</th><th>CVE</th><th>Severity</th><th>Package</th><th>CVSS</th><th>In Use</th></tr></thead>
+          <tbody id="runtime-cve-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: ATTACK PATHS             -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-attackpath">
+    <div class="topbar">
+      <h1>Attack Path Analysis</h1>
+      <div class="topbar-right">
+        <span class="chip chip-error" id="attackpath-chip">Analyzing...</span>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="attackpath-stats"></div>
+      <div id="attackpath-list" style="display:flex;flex-direction:column;gap:16px"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: SETTINGS                 -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-settings">
+    <div class="topbar"><h1>Settings</h1></div>
+    <div class="page-content">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><h2>Scan Configuration</h2></div>
+          <div id="settings-scan-config" style="display:flex;flex-direction:column;gap:14px;font-size:13px"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Risk Scoring Weights</h2></div>
+          <div id="settings-weights" style="display:flex;flex-direction:column;gap:14px;font-size:13px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════
+const S = {
+  scan: null,
+  history: [],
+  compliance: [],
+  alertRules: [],
+  alertEvents: [],
+  namespaces: [],
+  weights: null,
+  meta: null,
+  selectedPod: null,
+  complianceTab: 0,
+  rbac: [],
+  evidence: [],
+  evidenceSummary: null,
+  drift: null,
+  integrations: null,
+  runtime: null,
+  attackpath: null,
+};
+
+const TIER_COLORS = { critical:'#ef5350', high:'#ffa726', medium:'#42a5f5', low:'#66bb6a' };
+function tierColor(t) { return TIER_COLORS[t] || '#8796a5'; }
+function scoreColor(score) {
+  if (score >= 70) return 'var(--error-light)';
+  if (score >= 40) return 'var(--warning)';
+  return 'var(--success)';
+}
+function timeAgo(ts) {
+  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+function shortPod(name) {
+  if (!name) return '';
+  const parts = name.split('-');
+  return parts.length > 2 ? parts.slice(0, -2).join('-') : name;
+}
+function esc(s) { if (s == null) return ''; const d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageId).classList.add('active');
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  if (pageId === 'topology') setTimeout(drawLines, 100);
+}
+
+// ═══════════════════════════════════════
+// FETCH ALL DATA
+// ═══════════════════════════════════════
+async function fetchAll() {
+  try {
+    const results = await Promise.allSettled([
+      fetch('/api/scan').then(r => r.ok ? r.json() : null),
+      fetch('/api/history').then(r => r.ok ? r.json() : []),
+      fetch('/api/compliance').then(r => r.ok ? r.json() : []),
+      fetch('/api/alerts').then(r => r.ok ? r.json() : []),
+      fetch('/api/alerts/events').then(r => r.ok ? r.json() : []),
+      fetch('/api/namespaces').then(r => r.ok ? r.json() : []),
+      fetch('/api/settings/weights').then(r => r.ok ? r.json() : null),
+      fetch('/api/meta').then(r => r.ok ? r.json() : null),
+      fetch('/api/rbac').then(r => r.ok ? r.json() : []),
+      fetch('/api/evidence?days=90').then(r => r.ok ? r.json() : []),
+      fetch('/api/evidence/summary?days=90').then(r => r.ok ? r.json() : null),
+      fetch('/api/evidence/drift?days=90').then(r => r.ok ? r.json() : null),
+      fetch('/api/integrations').then(r => r.ok ? r.json() : null),
+      fetch('/api/runtime').then(r => r.ok ? r.json() : null),
+      fetch('/api/attackpath').then(r => r.ok ? r.json() : null),
+    ]);
+    if (results[0].status === 'fulfilled' && results[0].value) S.scan = results[0].value;
+    if (results[1].status === 'fulfilled') S.history = results[1].value || [];
+    if (results[2].status === 'fulfilled') S.compliance = results[2].value || [];
+    if (results[3].status === 'fulfilled') S.alertRules = results[3].value || [];
+    if (results[4].status === 'fulfilled') S.alertEvents = results[4].value || [];
+    if (results[5].status === 'fulfilled') S.namespaces = results[5].value || [];
+    if (results[6].status === 'fulfilled') S.weights = results[6].value;
+    if (results[7].status === 'fulfilled') S.meta = results[7].value;
+    if (results[8].status === 'fulfilled') { const r8 = results[8].value; S.rbac = Array.isArray(r8) ? r8 : (r8 && r8.findings ? r8.findings : []); }
+    if (results[9].status === 'fulfilled') S.evidence = results[9].value || [];
+    if (results[10].status === 'fulfilled') S.evidenceSummary = results[10].value;
+    if (results[11].status === 'fulfilled') S.drift = results[11].value;
+    if (results[12].status === 'fulfilled') S.integrations = results[12].value;
+    if (results[13].status === 'fulfilled') S.runtime = results[13].value;
+    if (results[14].status === 'fulfilled') S.attackpath = results[14].value;
+  } catch (err) {
+    console.warn('API not available:', err.message);
+  }
+  renderAll();
+}
+
+function renderAll() {
+  console.log('renderAll — scan:', !!S.scan, 'history:', S.history.length, 'compliance:', S.compliance.length, 'alerts:', S.alertRules.length);
+  const fns = [
+    ['renderSidebar', renderSidebar],
+    ['renderNamespaceDropdowns', renderNamespaceDropdowns],
+    ['renderDashboard', renderDashboard],
+    ['renderTopology', renderTopology],
+    ['renderPods', renderPods],
+    ['renderCompliance', renderCompliance],
+    ['renderAlerts', renderAlerts],
+    ['renderRBAC', renderRBAC],
+    ['renderEvidence', renderEvidence],
+    ['renderIntegrations', renderIntegrations],
+    ['renderRuntime', renderRuntime],
+    ['renderAttackPath', renderAttackPath],
+    ['renderSettings', renderSettings],
+  ];
+  for (const [name, fn] of fns) {
+    try { fn(); } catch (e) { console.error('RENDER ERROR in ' + name + ':', e); }
+  }
+}
+
+// ═══════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════
+function renderSidebar() {
+  const d = S.scan;
+  const el = document.getElementById('sidebar-footer');
+  if (!d) { el.innerHTML = 'Cluster: <span class="cluster-name">connecting...</span><br>Waiting for scan data...'; return; }
+  const unprotected = d.scores ? d.scores.filter(s => !s.blast.hasNetworkPolicy).length : 0;
+  el.innerHTML = `Cluster: <span class="cluster-name">${esc(d.clusterName)}</span><br>` +
+    `Namespace: ${esc(d.namespace)} &middot; ${d.totalPods} pods<br>` +
+    `Agent: healthy &middot; ${S.meta ? S.meta.version : ''}`;
+
+  const critPods = d.scores ? d.scores.filter(s => s.tier === 'critical').length : 0;
+  document.getElementById('badge-critical-pods').textContent = critPods;
+  const evtCount = S.alertEvents ? S.alertEvents.length : 0;
+  document.getElementById('badge-alert-count').textContent = evtCount;
+  const rbacCrit = (S.rbac || []).filter(f => f.riskLevel === 'critical').length;
+  document.getElementById('badge-rbac-crit').textContent = rbacCrit;
+
+  // Topbar chips
+  document.getElementById('chip-alerts-text').textContent = evtCount + ' alert' + (evtCount !== 1 ? 's' : '');
+  document.getElementById('chip-scan-text').textContent = 'Last scan: ' + timeAgo(d.scanTime);
+}
+
+// ═══════════════════════════════════════
+// NAMESPACE DROPDOWNS
+// ═══════════════════════════════════════
+function renderNamespaceDropdowns() {
+  const ns = S.namespaces || [];
+  ['topo-ns-filter', 'pods-ns-filter'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Namespaces</option>' +
+      ns.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if (cur) sel.value = cur;
+  });
+}
+
+// ═══════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════
+function renderDashboard() {
+  const d = S.scan;
+  if (!d) return;
+
+  const scores = d.scores || [];
+  const critCVEs = scores.reduce((sum, s) => sum + s.vulns.critical, 0);
+  const unprotected = scores.filter(s => !s.blast.hasNetworkPolicy).length;
+  const avgCompliance = S.compliance.length ? Math.round(S.compliance.reduce((s,c) => s+c.score, 0) / S.compliance.length) : 0;
+
+  // History sparkline data
+  const hist = S.history.slice(-12);
+  const maxScore = Math.max(...hist.map(h => h.clusterScore), 1);
+
+  function sparkline(values, color) {
+    const mx = Math.max(...values, 1);
+    return values.map((v,i) => {
+      const h = Math.round((v/mx)*90) + 10;
+      const op = i === values.length-1 ? '1' : '0.25';
+      return `<div class="bar" style="height:${h}%;background:${color};opacity:${op}"></div>`;
+    }).join('');
+  }
+
+  const histScores = hist.map(h => h.clusterScore);
+  const histUnprot = hist.map(h => h.unprotectedPods);
+  const histCrit = hist.map(h => h.criticalCVEs);
+  const histComp = hist.map(h => h.complianceScore);
+
+  document.getElementById('dash-stats').innerHTML = `
+    <div class="stat-card accent-blue">
+      <div class="stat-icon blue"><span class="mi">speed</span></div>
+      <div class="stat-label">Cluster Risk Score</div>
+      <div class="stat-value" style="color:${scoreColor(d.clusterScore)}">${d.clusterScore}<span class="stat-sub">/100</span></div>
+      <div class="sparkline">${sparkline(histScores, 'rgba(25,118,210,0.5)')}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">shield</span></div>
+      <div class="stat-label">Pods Without NetworkPolicy</div>
+      <div class="stat-value" style="color:var(--warning)">${unprotected}<span class="stat-sub">/${d.totalPods}</span></div>
+      <div class="sparkline">${sparkline(histUnprot, 'rgba(255,167,38,0.5)')}</div>
+    </div>
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">bug_report</span></div>
+      <div class="stat-label">Critical CVEs</div>
+      <div class="stat-value" style="color:var(--error-light)">${critCVEs}</div>
+      <div class="sparkline">${sparkline(histCrit, 'rgba(244,67,54,0.5)')}</div>
+    </div>
+    <div class="stat-card accent-success">
+      <div class="stat-icon green"><span class="mi">policy</span></div>
+      <div class="stat-label">Compliance Score</div>
+      <div class="stat-value" style="color:var(--success)">${avgCompliance}<span class="stat-sub">%</span></div>
+      <div class="sparkline">${sparkline(histComp, 'rgba(102,187,106,0.5)')}</div>
+    </div>`;
+
+  // Top-risk table
+  const top5 = scores.slice(0, 5);
+  document.getElementById('dash-top-pods').innerHTML = top5.map((s, i) => {
+    const reach = (s.blast.reachableTargets||[]).length;
+    const inet = s.blast.internetAccess ? ' + inet' : '';
+    const wc = s.workloadClass || '—';
+    const mult = s.riskMultiplier && s.riskMultiplier !== 1 ? ` <span style="color:var(--warning);font-size:10px">×${s.riskMultiplier.toFixed(1)}</span>` : '';
+    return `<tr>
+      <td>${i+1}</td><td>${esc(shortPod(s.podName))}</td>
+      <td style="font-size:11px">${esc(wc)}${mult}</td>
+      <td class="sev-${s.tier === 'critical' ? 'critical' : s.tier === 'high' ? 'high' : 'medium'}">${s.vulns.critical}C ${s.vulns.high}H</td>
+      <td>${reach} svcs${inet}</td>
+      <td style="font-weight:700;color:${scoreColor(s.total)}">${s.total}</td>
+      <td><span class="badge-sm badge-${s.tier}">${s.tier.charAt(0).toUpperCase()+s.tier.slice(1)}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Activity feed from alert events
+  const events = (S.alertEvents || []).slice(-6).reverse();
+  if (events.length) {
+    const sevDot = { critical:'var(--error)', high:'var(--warning)', medium:'var(--primary-light)', low:'var(--success)' };
+    document.getElementById('dash-activity').innerHTML = events.map(e => `
+      <div class="activity-item">
+        <div class="activity-dot" style="background:${sevDot[e.severity]||'var(--primary-light)'}"></div>
+        <div>
+          <div><strong>${esc(e.ruleName)}</strong> ${esc(e.message)}</div>
+          <div class="activity-time">${timeAgo(e.timestamp)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // Compliance summary cards
+  document.getElementById('dash-compliance').innerHTML = S.compliance.slice(0,3).map(fw => {
+    const col = fw.score >= 70 ? 'var(--success)' : fw.score >= 50 ? 'var(--warning)' : 'var(--error-light)';
+    const topChecks = (fw.controls||[]).slice(0,3);
+    return `<div class="compliance-card">
+      <div class="framework-header">
+        <div class="framework-name">${esc(fw.framework)}</div>
+        <div class="framework-score" style="color:${col}">${fw.score}%</div>
+      </div>
+      <div class="compliance-bar"><div class="compliance-bar-fill" style="width:${fw.score}%;background:${col}"></div></div>
+      <div class="compliance-checks">${topChecks.map(c => {
+        const icon = c.status==='pass' ? 'check_circle' : c.status==='warn' ? 'error' : 'cancel';
+        const icol = c.status==='pass' ? 'var(--success)' : c.status==='warn' ? 'var(--warning)' : 'var(--error-light)';
+        return `<div class="compliance-check"><span class="mi" style="color:${icol}">${icon}</span> ${esc(c.id)} ${esc(c.name)} &mdash; ${esc(c.evidence)}</div>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// TOPOLOGY
+// ═══════════════════════════════════════
+let currentView = 'configured';
+let topoScores = [];
+
+function renderTopology() {
+  if (!S.scan || !S.scan.scores) return;
+  topoScores = S.scan.scores;
+  const container = document.getElementById('graph-nodes');
+  if (!container) return;
+
+  // Layout pods in a grid
+  const pods = topoScores.slice(0, 15);
+  const cols = Math.ceil(Math.sqrt(pods.length + 1));
+  container.innerHTML = '';
+
+  pods.forEach((s, i) => {
+    const row = Math.floor(i / cols), col = i % cols;
+    const left = 5 + col * (85 / cols);
+    const top = 5 + row * (75 / Math.ceil(pods.length / cols));
+    const node = document.createElement('div');
+    node.className = 'graph-node ' + s.tier;
+    node.id = 'node-' + s.podName;
+    node.style.left = left + '%';
+    node.style.top = top + '%';
+    node.innerHTML = `${esc(shortPod(s.podName))} <span class="score-tiny">${s.total}</span>`;
+    node.onclick = () => selectTopoPod(s.podName);
+    container.appendChild(node);
+  });
+
+  // Internet node
+  const inetNode = document.createElement('div');
+  inetNode.className = 'graph-node internet';
+  inetNode.id = 'node-internet';
+  inetNode.style.left = '82%'; inetNode.style.top = '85%';
+  inetNode.innerHTML = 'INTERNET<span class="node-ports">0.0.0.0/0</span>';
+  container.appendChild(inetNode);
+
+  // Pulse animation for critical nodes
+  container.querySelectorAll('.graph-node.critical').forEach(n => {
+    n.style.animation = 'pulse 2s ease-in-out infinite';
+  });
+
+  if (!S.selectedPod && pods.length) S.selectedPod = pods[0].podName;
+  if (S.selectedPod) selectTopoPod(S.selectedPod);
+  setTimeout(drawLines, 50);
+}
+
+function selectTopoPod(podName) {
+  S.selectedPod = podName;
+  const score = topoScores.find(s => s.podName === podName);
+  if (!score) return;
+
+  document.getElementById('topo-detail').style.display = '';
+  document.getElementById('topo-detail-title').textContent = 'Selected: ' + shortPod(podName);
+  document.getElementById('topo-detail-score').textContent = 'Score: ' + score.total;
+  document.getElementById('topo-detail-score').className = 'badge-sm badge-' + score.tier;
+
+  // Blast list
+  const targets = score.blast.reachableTargets || [];
+  const dataStores = score.blast.dataStoreAccess || [];
+  document.getElementById('topo-blast-list').innerHTML = targets.map(t => {
+    const isDs = dataStores.includes(t);
+    const icon = isDs ? 'storage' : 'arrow_forward';
+    const tag = isDs ? '<span class="tag tag-danger">DATA STORE</span>' : '';
+    return `<div class="blast-item"><span class="mi" style="color:var(--error-light)">${icon}</span><div class="target">${esc(t)}</div><div>${tag}</div></div>`;
+  }).join('') + (score.blast.internetAccess ? `<div class="blast-item"><span class="mi" style="color:var(--error-light)">public</span><div class="target">0.0.0.0/0 &mdash; full internet</div><div><span class="tag tag-danger">EXFILTRATE</span></div></div>` : '');
+
+  // CVE list
+  const cves = score.vulns.topCVEs || [];
+  document.getElementById('topo-cve-list').innerHTML = cves.length ? cves.map(c =>
+    `<tr><td>${esc(c.id)}</td><td class="sev-${c.severity.toLowerCase()}">${c.severity}</td><td>${c.cvss}</td><td>${esc(c.package)}</td></tr>`
+  ).join('') : '<tr><td colspan="4" style="color:var(--text-secondary)">No CVE data available</td></tr>';
+
+  if (currentView === 'selected') drawLines();
+}
+
+function getNodeCenter(id) {
+  const node = document.getElementById('node-' + id);
+  if (!node) return null;
+  const container = document.getElementById('graph');
+  const cRect = container.getBoundingClientRect();
+  const nRect = node.getBoundingClientRect();
+  return { x: nRect.left - cRect.left + nRect.width/2, y: nRect.top - cRect.top + nRect.height/2 };
+}
+
+function drawLine(svg, from, to, stroke, width, opacity, marker, dash) {
+  if (!from || !to) return;
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', from.x); line.setAttribute('y1', from.y);
+  line.setAttribute('x2', to.x); line.setAttribute('y2', to.y);
+  line.setAttribute('stroke', stroke); line.setAttribute('stroke-width', width);
+  line.setAttribute('stroke-opacity', opacity);
+  if (marker) line.setAttribute('marker-end', marker);
+  if (dash) line.setAttribute('stroke-dasharray', dash);
+  svg.appendChild(line);
+}
+
+function drawLines() {
+  const svg = document.getElementById('graphLines');
+  if (!svg) return;
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = ''; svg.appendChild(defs);
+  const nodes = document.querySelectorAll('.graph-node');
+  const podNames = topoScores.map(s => s.podName);
+
+  if (currentView === 'configured') {
+    nodes.forEach(n => n.classList.remove('dimmed'));
+    topoScores.forEach(s => {
+      (s.blast.configuredTargets||[]).forEach(t => {
+        const from = getNodeCenter(s.podName), to = getNodeCenter(t);
+        drawLine(svg, from, to, '#42a5f5', '2', '0.7', 'url(#arrow-configured)');
+      });
+    });
+  } else if (currentView === 'actual') {
+    nodes.forEach(n => n.classList.remove('dimmed'));
+    topoScores.forEach(s => {
+      if (!s.blast.hasNetworkPolicy) {
+        (s.blast.reachableTargets||[]).forEach(t => {
+          const from = getNodeCenter(s.podName), to = getNodeCenter(t);
+          drawLine(svg, from, to, '#ef5350', '1', '0.15', 'url(#arrow-danger)', '4,4');
+        });
+        if (s.blast.internetAccess) {
+          const from = getNodeCenter(s.podName), to = getNodeCenter('internet');
+          drawLine(svg, from, to, '#ab47bc', '1', '0.25', 'url(#arrow-internet)', '3,3');
+        }
+      }
+      (s.blast.configuredTargets||[]).forEach(t => {
+        const from = getNodeCenter(s.podName), to = getNodeCenter(t);
+        drawLine(svg, from, to, '#42a5f5', '2', '0.8', 'url(#arrow-configured)');
+      });
+    });
+  } else if (currentView === 'selected' && S.selectedPod) {
+    const sel = topoScores.find(s => s.podName === S.selectedPod);
+    if (!sel) return;
+    const reachable = new Set([...(sel.blast.reachableTargets||[]), ...(sel.blast.configuredTargets||[])]);
+    if (sel.blast.internetAccess) reachable.add('internet');
+    nodes.forEach(n => {
+      const id = n.id.replace('node-','');
+      n.classList.toggle('dimmed', id !== S.selectedPod && !reachable.has(id));
+    });
+    const configured = new Set((sel.blast.configuredTargets||[]));
+    reachable.forEach(target => {
+      const from = getNodeCenter(S.selectedPod), to = getNodeCenter(target);
+      if (target === 'internet') drawLine(svg, from, to, '#ab47bc', '2', '0.7', 'url(#arrow-internet)');
+      else if (configured.has(target)) drawLine(svg, from, to, '#42a5f5', '2.5', '0.9', 'url(#arrow-configured)');
+      else drawLine(svg, from, to, '#ef5350', '1.5', '0.5', 'url(#arrow-danger)', '5,4');
+    });
+  }
+}
+
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.graph-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + view).classList.add('active');
+  drawLines();
+}
+
+// ═══════════════════════════════════════
+// PODS TABLE
+// ═══════════════════════════════════════
+function renderPods() {
+  if (!S.scan || !S.scan.scores) return;
+  let scores = [...S.scan.scores];
+
+  // Apply risk filter
+  const riskFilter = document.getElementById('pods-risk-filter')?.value || 'all';
+  if (riskFilter === 'critical') scores = scores.filter(s => s.tier === 'critical');
+  else if (riskFilter === 'high') scores = scores.filter(s => s.tier === 'critical' || s.tier === 'high');
+
+  // Apply namespace filter
+  const nsFilter = document.getElementById('pods-ns-filter')?.value || '';
+  if (nsFilter) scores = scores.filter(s => s.namespace === nsFilter);
+
+  document.getElementById('pods-tbody').innerHTML = scores.map((s, i) => {
+    const reach = (s.blast.reachableTargets||[]).length;
+    const inet = s.blast.internetAccess;
+    const netpol = s.blast.hasNetworkPolicy;
+    const wc = s.workloadClass || 'General';
+    const mult = s.riskMultiplier && s.riskMultiplier !== 1 ? `<br><span style="color:var(--warning);font-size:10px">×${s.riskMultiplier.toFixed(2)}</span>` : '';
+    return `<tr>
+      <td>${i+1}</td>
+      <td><strong>${esc(shortPod(s.podName))}</strong></td>
+      <td>${esc(s.namespace)}</td>
+      <td style="font-size:11px">${esc(wc)}${mult}</td>
+      <td>${esc(s.imageName)}</td>
+      <td class="sev-critical">${s.vulns.critical}</td>
+      <td class="sev-high">${s.vulns.high}</td>
+      <td>${reach}</td>
+      <td style="color:${inet?'var(--error-light)':'var(--success)'}">${inet?'Yes':'No'}</td>
+      <td style="color:${netpol?'var(--success)':'var(--error-light)'}">${netpol?'Applied':'None'}</td>
+      <td style="font-weight:700;color:${scoreColor(s.total)}">${s.total}</td>
+      <td><span class="badge-sm badge-${s.tier}">${s.tier.charAt(0).toUpperCase()+s.tier.slice(1)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// COMPLIANCE
+// ═══════════════════════════════════════
+function renderCompliance() {
+  if (!S.compliance || !S.compliance.length) return;
+
+  // Tabs
+  document.getElementById('compliance-tabs').innerHTML = S.compliance.map((fw, i) =>
+    `<div class="tab${i===S.complianceTab?' active':''}" onclick="switchComplianceTab(${i})">${esc(fw.framework)}</div>`
+  ).join('');
+
+  const fw = S.compliance[S.complianceTab];
+  if (!fw) return;
+  const col = fw.score >= 70 ? 'var(--success)' : fw.score >= 50 ? 'var(--warning)' : 'var(--error-light)';
+  const failing = fw.totalChecks - fw.passing;
+
+  document.getElementById('compliance-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Overall ${esc(fw.framework)} Score</div>
+      <div class="stat-value" style="color:${col}">${fw.score}%</div>
+    </div>
+    <div class="stat-card">
+      <div style="display:flex;justify-content:space-between">
+        <div><div class="stat-label">Controls Passing</div><div class="stat-value" style="color:var(--success)">${fw.passing}<span class="stat-sub">/${fw.totalChecks}</span></div></div>
+        <div style="text-align:right"><div class="stat-label">Controls Failing</div><div class="stat-value" style="color:var(--error-light)">${failing}<span class="stat-sub">/${fw.totalChecks}</span></div></div>
+      </div>
+    </div>`;
+
+  document.getElementById('compliance-table-title').textContent = fw.framework + ' Controls Status';
+  document.getElementById('compliance-tbody').innerHTML = (fw.controls||[]).map((c, idx) => {
+    const badge = c.status==='pass' ? 'badge-pass' : c.status==='warn' ? 'badge-warn' : 'badge-fail';
+    const label = c.status.toUpperCase();
+    const scoreCol = c.score >= 70 ? 'var(--success)' : c.score >= 40 ? 'var(--warning)' : 'var(--error-light)';
+    const findingsHtml = (c.findings||[]).map(f => `<div style="display:flex;gap:6px;align-items:baseline"><span style="color:var(--warning)">▸</span><span>${esc(f)}</span></div>`).join('');
+    const remedHtml = c.remediation ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(30,58,95,0.3);border-radius:6px;border-left:3px solid var(--primary-light)"><strong style="color:var(--primary-light)">Remediation</strong><div style="margin-top:4px">${esc(c.remediation)}</div></div>` : '';
+    const evidenceHtml = c.evidence ? `<div><strong style="color:var(--text-primary)">Evidence</strong><div style="margin-top:4px;color:var(--text-secondary)">${esc(c.evidence)}</div></div>` : '';
+    const hasDetail = c.evidence || (c.findings && c.findings.length) || c.remediation;
+    return `<tr style="cursor:${hasDetail?'pointer':'default'}" onclick="toggleComplianceDetail('cd-${idx}')">
+      <td>${esc(c.id)}</td><td>${esc(c.name)}</td>
+      <td><span class="badge-sm ${badge}">${label}</span></td>
+      <td style="font-weight:700;color:${scoreCol}">${c.score || 0}/100</td>
+      <td>${c.violations}</td>
+      <td style="text-align:center">${hasDetail ? '<span class="mi" style="font-size:16px;color:var(--text-secondary);transition:transform .2s" id="chevron-cd-'+idx+'">expand_more</span>' : ''}</td>
+    </tr>
+    <tr id="cd-${idx}" class="compliance-detail" style="display:none">
+      <td colspan="6" style="padding:0">
+        <div style="padding:12px 16px 14px;background:rgba(15,30,50,0.5);border-left:3px solid ${scoreCol};display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.5">
+          ${evidenceHtml}
+          ${findingsHtml ? '<div><strong style="color:var(--warning)">Findings</strong><div style="margin-top:4px">'+findingsHtml+'</div></div>' : ''}
+          ${remedHtml}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function switchComplianceTab(idx) {
+  S.complianceTab = idx;
+  renderCompliance();
+}
+
+function toggleComplianceDetail(id) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  const chevron = document.getElementById('chevron-' + id);
+  if (row.style.display === 'none') {
+    row.style.display = '';
+    if (chevron) chevron.textContent = 'expand_less';
+  } else {
+    row.style.display = 'none';
+    if (chevron) chevron.textContent = 'expand_more';
+  }
+}
+
+// ═══════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════
+function renderAlerts() {
+  const ruleIcons = {
+    'critical-cve-high-blast':'crisis_alert', 'cluster-score-increase':'trending_up',
+    'netpol-removed':'security', 'compliance-drop':'assignment_late',
+    'new-internet-pod':'public', 'weekly-digest':'summarize',
+  };
+  const ruleColors = {
+    'critical-cve-high-blast':'var(--error-light)', 'cluster-score-increase':'var(--warning)',
+    'netpol-removed':'var(--primary-light)', 'compliance-drop':'var(--warning)',
+    'new-internet-pod':'var(--purple)', 'weekly-digest':'var(--primary-light)',
+  };
+
+  document.getElementById('alert-rules-list').innerHTML = S.alertRules.map(r => `
+    <div class="alert-rule">
+      <span class="mi" style="color:${ruleColors[r.id]||'var(--primary-light)'}">${ruleIcons[r.id]||'notifications'}</span>
+      <div class="rule-info">
+        <div class="rule-name">${esc(r.name)}</div>
+        <div class="rule-desc">${esc(r.description)}</div>
+      </div>
+      <div class="toggle ${r.enabled?'on':''}" onclick="this.classList.toggle('on')"></div>
+    </div>`).join('') || '<div style="color:var(--text-secondary);padding:16px;font-size:13px">No alert rules configured</div>';
+
+  // Recent events
+  const events = (S.alertEvents || []).slice(-10).reverse();
+  const sevDot = { critical:'var(--error)', high:'var(--warning)', medium:'var(--primary-light)', low:'var(--success)' };
+  document.getElementById('alert-events-list').innerHTML = events.length ? events.map(e => `
+    <div class="activity-item">
+      <div class="activity-dot" style="background:${sevDot[e.severity]||'var(--primary-light)'}"></div>
+      <div><div><strong>${esc(e.ruleName)}</strong> ${esc(e.message)}</div><div class="activity-time">${timeAgo(e.timestamp)}</div></div>
+    </div>`).join('') : '<div style="color:var(--text-secondary);padding:16px;font-size:13px">No recent events</div>';
+}
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function renderSettings() {
+  const m = S.meta || {};
+  document.getElementById('settings-scan-config').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>Scan interval</strong><br><span style="color:var(--text-secondary);font-size:11px">How often Reflex recalculates blast radius</span></div>
+      <span class="btn" style="cursor:default">${esc(m.scanInterval || 'N/A')}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>Target namespace</strong><br><span style="color:var(--text-secondary);font-size:11px">Namespace being scanned</span></div>
+      <span class="btn" style="cursor:default">${esc(m.namespace || 'N/A')}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>Version</strong></div>
+      <span class="btn" style="cursor:default">${esc(m.version || 'N/A')}</span>
+    </div>`;
+
+  const w = S.weights;
+  if (!w) return;
+  const weightItems = [
+    { label:'CVE Severity', key:'cve', color:'var(--error-light)' },
+    { label:'Blast Radius (reachability)', key:'blast', color:'var(--warning)' },
+    { label:'Policy Gap', key:'policyGap', color:'var(--primary-light)' },
+    { label:'Permissions / Security Context', key:'permissions', color:'var(--purple)' },
+    { label:'Data Sensitivity', key:'sensitivity', color:'var(--text-primary)' },
+  ];
+  document.getElementById('settings-weights').innerHTML = weightItems.map(wi => `
+    <div>
+      <div style="display:flex;justify-content:space-between"><strong>${wi.label}</strong><span style="color:${wi.color}">${w[wi.key]}%</span></div>
+      <div style="height:6px;background:rgba(30,58,95,0.5);border-radius:3px;margin-top:6px;overflow:hidden"><div style="width:${w[wi.key]}%;height:100%;background:${wi.color};border-radius:3px"></div></div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════
+// RBAC AUDIT
+// ═══════════════════════════════════════
+function renderRBAC() {
+  const findings = S.rbac || [];
+  if (!findings.length && !S.scan) return;
+
+  // Use scan RBAC data if /api/rbac returned empty
+  const rbac = findings.length ? findings : (S.scan && S.scan.rbacFindings ? S.scan.rbacFindings : []);
+
+  const riskFilter = document.getElementById('rbac-risk-filter')?.value || 'all';
+  let filtered = [...rbac];
+  if (riskFilter === 'critical') filtered = filtered.filter(f => f.riskLevel === 'critical');
+  else if (riskFilter === 'high') filtered = filtered.filter(f => f.riskLevel === 'critical' || f.riskLevel === 'high');
+
+  const critCount = rbac.filter(f => f.riskLevel === 'critical').length;
+  const highCount = rbac.filter(f => f.riskLevel === 'high').length;
+  const clusterAdmins = rbac.filter(f => f.hasClusterAdmin).length;
+  const secretAccess = rbac.filter(f => f.hasSecretAccess).length;
+
+  document.getElementById('rbac-stats').innerHTML = `
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">crisis_alert</span></div>
+      <div class="stat-label">Critical RBAC</div>
+      <div class="stat-value" style="color:var(--error-light)">${critCount}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">warning</span></div>
+      <div class="stat-label">High RBAC</div>
+      <div class="stat-value" style="color:var(--warning)">${highCount}</div>
+    </div>
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">supervisor_account</span></div>
+      <div class="stat-label">Cluster Admins</div>
+      <div class="stat-value" style="color:var(--error-light)">${clusterAdmins}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">vpn_key</span></div>
+      <div class="stat-label">Secret Access</div>
+      <div class="stat-value" style="color:var(--warning)">${secretAccess}</div>
+    </div>`;
+
+  document.getElementById('rbac-tbody').innerHTML = filtered.length ? filtered.map(f => {
+    const riskBadge = f.riskLevel === 'critical' ? 'badge-critical' : f.riskLevel === 'high' ? 'badge-high' : f.riskLevel === 'medium' ? 'badge-medium' : 'badge-low';
+    const flags = (f.flags || []).map(fl => `<span class="badge-sm badge-warn" style="margin:1px 2px;font-size:9px">${esc(fl)}</span>`).join(' ');
+    const details = [];
+    if (f.hasClusterAdmin) details.push('<span class="sev-critical">cluster-admin</span>');
+    if (f.hasWildcardAccess) details.push('<span class="sev-high">wildcard</span>');
+    if (f.hasExecCapability) details.push('<span class="sev-high">exec</span>');
+    if (f.hasSecretAccess) details.push('<span class="sev-high">secrets</span>');
+    return `<tr>
+      <td><strong>${esc(shortPod(f.podName))}</strong></td>
+      <td>${esc(f.serviceAccountName)}</td>
+      <td><span class="badge-sm ${riskBadge}">${(f.riskLevel||'').toUpperCase()}</span></td>
+      <td style="font-weight:700">${f.riskScore || 0}</td>
+      <td>${flags || '—'}</td>
+      <td style="font-size:11px">${details.join(' ') || '—'}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" style="color:var(--text-secondary)">No RBAC findings</td></tr>';
+}
+
+// ═══════════════════════════════════════
+// EVIDENCE VAULT
+// ═══════════════════════════════════════
+function renderEvidence() {
+  const summary = S.evidenceSummary || {};
+  const drift = S.drift || {};
+  const records = S.evidence || [];
+
+  const totalRecords = summary.totalRecords || records.length || 0;
+  const chainIntact = summary.chainIntact !== false;
+  const driftCount = drift.totalDrifts || 0;
+  const controls = summary.controls || [];
+
+  document.getElementById('evidence-stats').innerHTML = `
+    <div class="stat-card accent-blue">
+      <div class="stat-icon blue"><span class="mi">description</span></div>
+      <div class="stat-label">Evidence Records</div>
+      <div class="stat-value">${totalRecords}</div>
+    </div>
+    <div class="stat-card accent-success">
+      <div class="stat-icon green"><span class="mi">verified</span></div>
+      <div class="stat-label">Hash Chain</div>
+      <div class="stat-value" style="color:${chainIntact?'var(--success)':'var(--error-light)'}">${chainIntact?'INTACT':'BROKEN'}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">trending_up</span></div>
+      <div class="stat-label">Drift Events</div>
+      <div class="stat-value" style="color:var(--warning)">${driftCount}</div>
+    </div>
+    <div class="stat-card accent-blue">
+      <div class="stat-icon blue"><span class="mi">schedule</span></div>
+      <div class="stat-label">Retention</div>
+      <div class="stat-value">90<span class="stat-sub">d</span></div>
+    </div>`;
+
+  // Drift timeline
+  const driftEvents = (drift.events || []).slice(0, 30).reverse();
+  const sevDot = { critical:'var(--error)', high:'var(--warning)', medium:'var(--primary-light)', low:'var(--success)' };
+  document.getElementById('drift-timeline').innerHTML = driftEvents.length ? driftEvents.map(e => `
+    <div class="activity-item">
+      <div class="activity-dot" style="background:${sevDot[e.severity]||'var(--primary-light)'}"></div>
+      <div>
+        <div><strong>${esc(e.category)}</strong> <span style="color:var(--text-secondary)">${esc(e.message)}</span></div>
+        <div class="activity-time">${timeAgo(e.timestamp)}</div>
+      </div>
+    </div>`).join('') : '<div style="color:var(--text-secondary);padding:16px;font-size:13px">No drift events in the last 90 days</div>';
+
+  // Control pass rates
+  document.getElementById('evidence-controls').innerHTML = controls.length ? controls.map(c => {
+    const rate = c.passRate != null ? c.passRate : 0;
+    const col = rate >= 80 ? 'var(--success)' : rate >= 50 ? 'var(--warning)' : 'var(--error-light)';
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span>${esc(c.controlId)} ${esc(c.framework)}</span>
+        <span style="color:${col};font-weight:700">${rate}%</span>
+      </div>
+      <div style="height:5px;background:rgba(30,58,95,0.5);border-radius:3px;overflow:hidden">
+        <div style="width:${rate}%;height:100%;background:${col};border-radius:3px"></div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--text-secondary);padding:16px;font-size:13px">No control data yet</div>';
+
+  // Recent records
+  document.getElementById('evidence-tbody').innerHTML = (Array.isArray(records) ? records : []).slice(0, 20).map(r => {
+    const hash = (r.hash || r.currentHash || '').substring(0, 12);
+    return `<tr>
+      <td>${r.timestamp ? timeAgo(r.timestamp) : '—'}</td>
+      <td style="font-weight:700">${r.clusterScore || 0}</td>
+      <td>${r.podCount || 0}</td>
+      <td class="sev-critical">${r.criticalCVEs || 0}</td>
+      <td>${r.netpolCoverage || 0}%</td>
+      <td style="font-family:monospace;font-size:10px;color:var(--text-secondary)">${esc(hash)}…</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--text-secondary)">No evidence records yet</td></tr>';
+}
+
+async function verifyChain() {
+  try {
+    const res = await fetch('/api/evidence/verify');
+    const data = await res.json();
+    if (data.intact || data.chainIntact) {
+      alert('✅ Hash chain is INTACT — all evidence records verified');
+    } else {
+      alert('❌ Hash chain is BROKEN — evidence may have been tampered with\n\n' + (data.error || data.message || ''));
+    }
+  } catch (e) {
+    alert('Could not verify chain: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════
+// INTEGRATIONS
+// ═══════════════════════════════════════
+function renderIntegrations() {
+  const data = S.integrations || {};
+  const hasAny = data.configured || data.vanta || data.drata;
+
+  // Build provider cards from flat API response
+  const providerList = [
+    { name: 'Vanta', active: !!data.vanta, icon: 'security' },
+    { name: 'Drata', active: !!data.drata, icon: 'shield' },
+  ];
+
+  document.getElementById('integrations-providers').innerHTML = hasAny ? providerList.map(p => {
+    const statusBadge = p.active ? 'badge-pass' : 'badge-fail';
+    const statusText = p.active ? 'ACTIVE' : 'NOT CONFIGURED';
+    return `<div class="card">
+      <div class="card-header">
+        <h2><span class="mi" style="font-size:18px;vertical-align:text-bottom">${p.icon}</span> ${esc(p.name)}</h2>
+        <span class="badge-sm ${statusBadge}">${statusText}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-secondary)">
+        ${p.active ? '<div>Provider configured and active</div>' : '<div>Not configured</div>'}
+      </div>
+    </div>`;
+  }).join('') : `
+    <div class="card" style="grid-column:span 2">
+      <div style="text-align:center;padding:32px;color:var(--text-secondary)">
+        <span class="mi" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3">cloud_off</span>
+        <div style="font-size:16px;font-weight:500;margin-bottom:8px">No Integrations Configured</div>
+        <div style="font-size:13px">Add <code>--vanta-token</code> or <code>--drata-key</code> flags to enable compliance platform integration</div>
+      </div>
+    </div>`;
+
+  const pushes = data.recentPushes || [];
+  document.getElementById('integrations-tbody').innerHTML = (Array.isArray(pushes) ? pushes : []).slice(0, 20).map(l => {
+    const ok = l.status === 'success' || l.success;
+    return `<tr>
+      <td>${l.timestamp ? timeAgo(l.timestamp) : '—'}</td>
+      <td>${esc(l.provider || l.name || '—')}</td>
+      <td>${esc(l.type || l.action || '—')}</td>
+      <td><span class="badge-sm ${ok ? 'badge-pass' : 'badge-fail'}">${ok ? 'OK' : 'FAIL'}</span></td>
+      <td style="font-size:11px">${esc(l.message || l.error || '—')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" style="color:var(--text-secondary)">No push history — enable Vanta or Drata to start pushing evidence</td></tr>';
+}
+
+// ═══════════════════════════════════════
+// RUNTIME INSIGHTS
+// ═══════════════════════════════════════
+function renderRuntime() {
+  const rt = S.runtime || {};
+  const totalCVEs = rt.totalCves || 0;
+  const inUseCVEs = rt.inUseCves || 0;
+  const dormant = totalCVEs - inUseCVEs;
+  const noise = rt.noiseReduction || 0;
+  const profiles = rt.profiles || [];
+  const pending = rt.status === 'pending';
+
+  document.getElementById('runtime-noise-chip').textContent = pending ? 'Waiting for scan...' : noise.toFixed(0) + '% noise reduction';
+  document.getElementById('runtime-noise-chip').className = 'chip ' + (noise >= 50 ? 'chip-success' : noise > 0 ? 'chip-info' : 'chip-error');
+
+  document.getElementById('runtime-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total CVEs</div>
+      <div class="stat-value">${totalCVEs}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">In Use CVEs</div>
+      <div class="stat-value" style="color:var(--error-light)">${inUseCVEs}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Dormant CVEs</div>
+      <div class="stat-value" style="color:var(--success)">${dormant}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Noise Reduction</div>
+      <div class="stat-value" style="color:var(--primary-light)">${noise.toFixed(0)}%</div>
+    </div>`;
+
+  // Per-pod bar chart
+  const scores = (S.scan && S.scan.scores) || [];
+  const podMap = rt.podInUseMap || {};
+  document.getElementById('runtime-pod-bars').innerHTML = scores.slice(0, 15).map(s => {
+    const total = s.vulns.totalCount || 0;
+    const inUseCount = podMap[s.podName] || 0;
+    const dormantCount = total - inUseCount;
+    const pct = total > 0 ? Math.round(inUseCount / total * 100) : 0;
+    return `<div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px">
+        <span>${esc(shortPod(s.podName))}</span>
+        <span style="color:var(--text-secondary)">${inUseCount} in use / ${total} total</span>
+      </div>
+      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,0.05)">
+        <div style="width:${pct}%;background:var(--error-light);border-radius:4px 0 0 4px"></div>
+        <div style="width:${100-pct}%;background:var(--success);opacity:0.3;border-radius:0 4px 4px 0"></div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--text-secondary);padding:16px">No scan data yet</div>';
+
+  // Profiles list
+  document.getElementById('runtime-profiles').innerHTML = profiles.length > 0 ? profiles.map(p => {
+    const libCount = (p.loadedLibs || []).length;
+    const pkgCount = (p.loadedPackages || []).length;
+    return `<div style="padding:8px 10px;background:var(--bg-surface);border-radius:6px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:500;color:var(--text-primary)">${esc(shortPod(p.podName))}</span>
+        <span style="color:var(--text-secondary)">${libCount} libs, ${pkgCount} pkgs</span>
+      </div>
+      ${pkgCount > 0 ? '<div style="margin-top:4px;color:var(--primary-light);font-size:11px">' + (p.loadedPackages || []).slice(0, 8).map(pk => '<span style="background:var(--primary-bg);padding:1px 6px;border-radius:3px;margin:1px 2px;display:inline-block">' + esc(pk) + '</span>').join('') + (pkgCount > 8 ? ' <span style="color:var(--text-disabled)">+' + (pkgCount-8) + ' more</span>' : '') + '</div>' : ''}
+    </div>`;
+  }).join('') : '<div style="color:var(--text-secondary);padding:16px">Runtime profiles will appear after the operator scans running pods</div>';
+
+  // CVE detail table
+  const allCVEs = [];
+  scores.forEach(s => {
+    (s.vulns.topCVEs || []).forEach(c => {
+      allCVEs.push({ pod: s.podName, ...c });
+    });
+  });
+  allCVEs.sort((a, b) => (b.inUse ? 1 : 0) - (a.inUse ? 1 : 0) || b.cvss - a.cvss);
+
+  document.getElementById('runtime-cve-tbody').innerHTML = allCVEs.slice(0, 30).map(c => {
+    const sevColor = c.severity === 'CRITICAL' ? 'var(--error-light)' : c.severity === 'HIGH' ? 'var(--warning)' : 'var(--primary-light)';
+    const inUseTag = c.inUse
+      ? '<span style="background:var(--error-bg);color:var(--error-light);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500">IN USE</span>'
+      : '<span style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500">DORMANT</span>';
+    return `<tr>
+      <td>${esc(shortPod(c.pod))}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(c.id)}</td>
+      <td><span style="color:${sevColor};font-weight:600">${c.severity}</span></td>
+      <td>${esc(c.package)}</td>
+      <td style="font-weight:600">${c.cvss.toFixed(1)}</td>
+      <td>${inUseTag}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--text-secondary)">No CVE data yet</td></tr>';
+}
+
+// ═══════════════════════════════════════
+// ATTACK PATHS
+// ═══════════════════════════════════════
+function renderAttackPath() {
+  const ap = S.attackpath || {};
+  const paths = ap.paths || [];
+  const pending = ap.status === 'pending';
+
+  const critCount = ap.criticalPaths || 0;
+  document.getElementById('badge-attack-crit').textContent = critCount || '';
+  document.getElementById('attackpath-chip').textContent = pending ? 'Waiting for scan...' : critCount + ' critical paths';
+  document.getElementById('attackpath-chip').className = 'chip ' + (critCount > 0 ? 'chip-error' : 'chip-success');
+
+  document.getElementById('attackpath-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total Attack Paths</div>
+      <div class="stat-value">${ap.totalPaths || 0}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Critical Paths</div>
+      <div class="stat-value" style="color:var(--error-light)">${critCount}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Shortest Path</div>
+      <div class="stat-value" style="color:var(--warning)">${ap.shortestHops || '—'}<span class="stat-sub"> hops</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Most Exposed Pod</div>
+      <div class="stat-value" style="font-size:16px;color:var(--primary-light)">${esc(shortPod(ap.mostExposedPod)) || '—'}</div>
+    </div>`;
+
+  if (paths.length === 0) {
+    document.getElementById('attackpath-list').innerHTML = `
+      <div class="card" style="text-align:center;padding:40px">
+        <span class="mi" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3;color:var(--success)">verified_user</span>
+        <div style="font-size:16px;font-weight:500;margin-bottom:8px;color:var(--success)">No Attack Paths Found</div>
+        <div style="font-size:13px;color:var(--text-secondary)">No exploitable chains from internet to critical assets detected.</div>
+      </div>`;
+    return;
+  }
+
+  const nodeTypeIcons = { internet: 'public', pod: 'dns', 'cluster-admin': 'security', secret: 'vpn_key', role: 'admin_panel_settings' };
+  const nodeTypeColors = { internet: 'var(--info)', pod: 'var(--primary-light)', 'cluster-admin': 'var(--error-light)', secret: 'var(--warning)', role: 'var(--purple)' };
+  const edgeTypeLabels = { network_reach: 'Network', rbac_escalate: 'RBAC Escalation', secret_access: 'Secret Access', container_escape: 'Container Escape', exec_into: 'Pod Exec' };
+  const sevColors = { critical: 'var(--error-light)', high: 'var(--warning)', medium: 'var(--primary-light)', low: 'var(--success)' };
+
+  document.getElementById('attackpath-list').innerHTML = paths.map((p, idx) => {
+    const sevCol = sevColors[p.severity] || 'var(--text-secondary)';
+    const nodesHtml = (p.nodes || []).map((n, ni) => {
+      const icon = nodeTypeIcons[n.type] || 'circle';
+      const color = nodeTypeColors[n.type] || 'var(--text-secondary)';
+      const edge = p.edges && p.edges[ni] ? p.edges[ni] : null;
+      const arrow = ni < (p.nodes || []).length - 1
+        ? `<div style="display:flex;flex-direction:column;align-items:center;padding:0 8px">
+            <div style="width:40px;height:2px;background:${sevCol}"></div>
+            <div style="font-size:9px;color:var(--text-disabled);margin-top:2px;white-space:nowrap">${edge ? edgeTypeLabels[edge.attackType] || edge.attackType : ''}</div>
+          </div>`
+        : '';
+      return `<div style="display:flex;align-items:center">
+        <div style="display:flex;flex-direction:column;align-items:center;min-width:64px">
+          <div style="width:36px;height:36px;border-radius:50%;background:${color}22;border:2px solid ${color};display:flex;align-items:center;justify-content:center">
+            <span class="mi" style="font-size:18px;color:${color}">${icon}</span>
+          </div>
+          <div style="font-size:10px;margin-top:4px;color:var(--text-secondary);text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.label)}</div>
+        </div>
+        ${arrow}
+      </div>`;
+    }).join('');
+
+    const edgesDetail = (p.edges || []).map(e =>
+      `<div style="font-size:11px;color:var(--text-secondary);padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="color:${sevCol};font-weight:500">${edgeTypeLabels[e.attackType] || e.attackType}</span> — ${esc(e.description)}
+      </div>`
+    ).join('');
+
+    return `<div class="card">
+      <div class="card-header">
+        <h2 style="display:flex;align-items:center;gap:8px">
+          <span class="badge-sm" style="background:${sevCol}22;color:${sevCol}">${p.severity.toUpperCase()}</span>
+          ${esc(p.description)}
+        </h2>
+        <span style="font-size:12px;color:var(--text-secondary)">Score: <strong style="color:${sevCol}">${p.score.toFixed(0)}</strong> | ${p.hopCount} hops</span>
+      </div>
+      <div style="display:flex;align-items:center;overflow-x:auto;padding:12px 0;gap:0">${nodesHtml}</div>
+      <div id="ap-detail-${idx}" style="display:none;margin-top:12px;padding:12px;background:var(--bg-surface);border-radius:8px">${edgesDetail}</div>
+      <div style="text-align:center;margin-top:8px">
+        <span style="cursor:pointer;font-size:12px;color:var(--primary-light)" onclick="toggleAPDetail(${idx})">Show Details <span class="mi" style="font-size:14px;vertical-align:text-bottom" id="ap-chevron-${idx}">expand_more</span></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAPDetail(idx) {
+  const el = document.getElementById('ap-detail-' + idx);
+  const ch = document.getElementById('ap-chevron-' + idx);
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    if (ch) ch.textContent = 'expand_less';
+  } else {
+    el.style.display = 'none';
+    if (ch) ch.textContent = 'expand_more';
+  }
+}
+
+// ═══════════════════════════════════════
+// EXPORT ACTIONS
+// ═══════════════════════════════════════
+function exportCSV() {
+  window.open('/api/export/csv', '_blank');
+}
+async function exportPDF() {
+  if (!S.scan) { alert('No scan data available yet.'); return; }
+  const d = S.scan;
+  const scores = d.scores || [];
+  const critCVEs = scores.reduce((a, s) => a + s.vulns.critical, 0);
+  const highCVEs = scores.reduce((a, s) => a + s.vulns.high, 0);
+  const unprotected = scores.filter(s => !s.blast.hasNetworkPolicy).length;
+  const inetExposed = scores.filter(s => s.blast.internetAccess).length;
+  const critPods = scores.filter(s => s.tier === 'critical');
+  const highPods = scores.filter(s => s.tier === 'high');
+  const now = new Date().toLocaleString();
+
+  // Fetch evidence vault data
+  let evSummary = { totalRecords: 0, chainIntact: true, controls: [] };
+  let driftData = { totalDrifts: 0, events: [] };
+  try {
+    const [evRes, drRes] = await Promise.all([
+      fetch('/api/evidence/summary?days=90').then(r => r.json()),
+      fetch('/api/evidence/drift?days=90').then(r => r.json())
+    ]);
+    evSummary = evRes;
+    driftData = drRes;
+  } catch(e) { console.warn('Evidence fetch failed:', e); }
+
+  // SOC 2 controls detail
+  const soc2 = (S.compliance || []).find(f => f.framework === 'SOC 2');
+  const soc2Controls = soc2 ? soc2.controls : [];
+  const evControls = evSummary.controls || [];
+
+  const controlRows = soc2Controls.map(c => {
+    const ev = evControls.find(e => e.framework === 'SOC 2' && e.controlId === c.id) || {};
+    const statusIcon = c.status === 'pass' ? '&#9679;' : c.status === 'fail' ? '&#9679;' : '&#9679;';
+    const statusColor = c.status === 'pass' ? '#2e7d32' : c.status === 'fail' ? '#d32f2f' : '#f9a825';
+    const passRate = ev.passRate != null ? ev.passRate + '%' : 'N/A';
+    const records = ev.totalRecords || 0;
+    const fails = ev.failCount || 0;
+    const lastFail = ev.lastFailedAt && ev.lastFailedAt !== '0001-01-01T00:00:00Z' ? new Date(ev.lastFailedAt).toLocaleDateString() : 'Never';
+    return `<tr>
+      <td><span style="color:${statusColor};font-size:14px">${statusIcon}</span> ${esc(c.id)}</td>
+      <td>${esc(c.name)}</td>
+      <td style="font-weight:700;color:${statusColor}">${c.status.toUpperCase()}</td>
+      <td>${c.violations}</td>
+      <td>${passRate}</td>
+      <td>${records}</td>
+      <td>${fails}</td>
+      <td>${lastFail}</td>
+    </tr>
+    <tr><td colspan="8" style="background:#f8f9fa;padding:8px 12px;font-size:9px;color:#555;border-bottom:2px solid #e0e0e0"><strong>Evidence:</strong> ${esc(c.evidence)}</td></tr>`;
+  }).join('');
+
+  // Framework summary
+  const fwRows = (S.compliance || []).map(fw => {
+    const col = fw.score >= 70 ? '#2e7d32' : fw.score >= 50 ? '#f9a825' : '#d32f2f';
+    return `<tr><td>${esc(fw.framework)} ${esc(fw.version)}</td><td style="font-weight:700;color:${col}">${fw.score}%</td><td>${fw.passing}/${fw.totalChecks}</td><td>${fw.totalChecks - fw.passing}</td></tr>`;
+  }).join('');
+
+  // Drift events
+  const driftRows = (driftData.events || []).slice(0, 20).map(e => {
+    const sevCol = e.severity === 'critical' ? '#d32f2f' : e.severity === 'high' ? '#ef6c00' : e.severity === 'medium' ? '#f9a825' : '#2e7d32';
+    return `<tr><td>${new Date(e.timestamp).toLocaleString()}</td><td style="color:${sevCol};font-weight:600">${e.severity.toUpperCase()}</td><td>${esc(e.category)}</td><td>${esc(e.message)}</td></tr>`;
+  }).join('');
+
+  // Pod risk table
+  const podRows = scores.slice(0, 15).map((s, i) => {
+    const reach = (s.blast.reachableTargets||[]).length;
+    return `<tr><td>${i+1}</td><td>${esc(shortPod(s.podName))}</td><td>${s.vulns.critical}</td><td>${s.vulns.high}</td><td>${reach}</td><td>${s.blast.internetAccess?'Yes':'No'}</td><td>${s.blast.hasNetworkPolicy?'Yes':'No'}</td><td style="font-weight:700">${s.total}</td><td>${s.tier.toUpperCase()}</td></tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Reflex SOC 2 Compliance Report — ${esc(d.clusterName)}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1a1a; padding:40px 50px; font-size:11px; line-height:1.5; }
+  h1 { font-size:22px; margin-bottom:2px; }
+  .subtitle { font-size:13px; color:#1976d2; font-weight:600; margin-bottom:4px; }
+  h2 { font-size:14px; margin:28px 0 10px; border-bottom:2px solid #1976d2; padding-bottom:4px; color:#1976d2; }
+  h3 { font-size:12px; margin:18px 0 6px; color:#333; }
+  .meta { color:#666; font-size:10px; margin-bottom:20px; }
+  .summary { display:flex; gap:14px; margin-bottom:16px; }
+  .sb { flex:1; border:1px solid #ddd; border-radius:6px; padding:10px 14px; text-align:center; }
+  .sb .val { font-size:22px; font-weight:700; }
+  .sb .label { font-size:9px; color:#666; text-transform:uppercase; letter-spacing:0.5px; }
+  .critical { color:#d32f2f; } .high { color:#ef6c00; } .warn { color:#f9a825; } .good { color:#2e7d32; }
+  table { width:100%; border-collapse:collapse; margin-bottom:16px; font-size:10px; }
+  th { background:#f5f5f5; text-align:left; padding:6px 8px; border-bottom:2px solid #ddd; font-weight:600; }
+  td { padding:5px 8px; border-bottom:1px solid #eee; }
+  tr:nth-child(even) { background:#fafafa; }
+  .chain { display:inline-block; padding:3px 10px; border-radius:10px; font-size:10px; font-weight:600; }
+  .chain-ok { background:#e8f5e9; color:#2e7d32; }
+  .chain-bad { background:#ffebee; color:#d32f2f; }
+  .footer { margin-top:30px; padding-top:12px; border-top:1px solid #ddd; color:#999; font-size:9px; text-align:center; }
+  .page-break { page-break-before:always; }
+  @media print { body { padding:20px 30px; } .page-break { page-break-before:always; } }
+</style></head><body>
+
+<h1>Reflex SOC 2 Compliance Report</h1>
+<div class="subtitle">Kubernetes Infrastructure Evidence — ${esc(d.namespace)}</div>
+<div class="meta">
+  Cluster: <strong>${esc(d.clusterName)}</strong> &nbsp;|&nbsp;
+  Namespace: <strong>${esc(d.namespace)}</strong> &nbsp;|&nbsp;
+  Generated: ${now} &nbsp;|&nbsp;
+  Evidence Period: 90 days &nbsp;|&nbsp;
+  Evidence Records: ${evSummary.totalRecords} &nbsp;|&nbsp;
+  Hash Chain: <span class="chain ${evSummary.chainIntact ? 'chain-ok' : 'chain-bad'}">${evSummary.chainIntact ? 'INTACT' : 'BROKEN'}</span>
+</div>
+
+<h2>1. Executive Summary</h2>
+<div class="summary">
+  <div class="sb"><div class="val ${d.clusterScore>=70?'critical':d.clusterScore>=40?'warn':'good'}">${d.clusterScore}</div><div class="label">Cluster Risk Score</div></div>
+  <div class="sb"><div class="val">${d.totalPods}</div><div class="label">Total Pods</div></div>
+  <div class="sb"><div class="val critical">${critPods.length}</div><div class="label">Critical Risk</div></div>
+  <div class="sb"><div class="val high">${highPods.length}</div><div class="label">High Risk</div></div>
+  <div class="sb"><div class="val warn">${unprotected}</div><div class="label">No NetworkPolicy</div></div>
+  <div class="sb"><div class="val critical">${inetExposed}</div><div class="label">Internet Exposed</div></div>
+</div>
+<div class="summary">
+  <div class="sb"><div class="val critical">${critCVEs.toLocaleString()}</div><div class="label">Critical CVEs</div></div>
+  <div class="sb"><div class="val high">${highCVEs.toLocaleString()}</div><div class="label">High CVEs</div></div>
+  <div class="sb"><div class="val">${d.networkPolicies}</div><div class="label">NetworkPolicies</div></div>
+  <div class="sb"><div class="val">${evSummary.totalRecords}</div><div class="label">Evidence Records</div></div>
+  <div class="sb"><div class="val ${driftData.totalDrifts > 0 ? 'warn' : 'good'}">${driftData.totalDrifts}</div><div class="label">Drift Events</div></div>
+</div>
+
+<h2>2. Framework Compliance Summary</h2>
+<table><thead><tr><th>Framework</th><th>Score</th><th>Passing</th><th>Failing</th></tr></thead><tbody>${fwRows}</tbody></table>
+
+<div class="page-break"></div>
+<h2>3. SOC 2 Controls — Detailed Evidence</h2>
+<p style="margin-bottom:12px;color:#555">Each control below includes current status, historical pass rate over the evidence period, evidence record count, and the specific evidence collected by Reflex.</p>
+<table><thead><tr><th>Control</th><th>Name</th><th>Status</th><th>Violations</th><th>Pass Rate</th><th>Records</th><th>Failures</th><th>Last Failed</th></tr></thead><tbody>${controlRows}</tbody></table>
+
+${driftRows ? `<div class="page-break"></div>
+<h2>4. Compliance Drift Events (Last 90 Days)</h2>
+<p style="margin-bottom:12px;color:#555">Drift events are automatically detected when compliance controls change status between consecutive scans.</p>
+<table><thead><tr><th>Time</th><th>Severity</th><th>Category</th><th>Description</th></tr></thead><tbody>${driftRows}</tbody></table>` : `<h2>4. Compliance Drift Events</h2><p style="color:#2e7d32;font-weight:600">No compliance drift events detected in the last 90 days.</p>`}
+
+<div class="page-break"></div>
+<h2>5. Pod Risk Assessment (Top ${Math.min(scores.length, 15)})</h2>
+<table><thead><tr><th>#</th><th>Pod</th><th>Crit CVEs</th><th>High CVEs</th><th>Reachable</th><th>Internet</th><th>NetPol</th><th>Score</th><th>Risk</th></tr></thead><tbody>${podRows}</tbody></table>
+
+<h2>6. Evidence Integrity</h2>
+<table>
+  <tr><td style="width:200px"><strong>Total Evidence Records</strong></td><td>${evSummary.totalRecords}</td></tr>
+  <tr><td><strong>Evidence Period</strong></td><td>${evSummary.period || '90 days'}</td></tr>
+  <tr><td><strong>SHA-256 Hash Chain</strong></td><td><span class="chain ${evSummary.chainIntact ? 'chain-ok' : 'chain-bad'}">${evSummary.chainIntact ? 'VERIFIED — INTACT' : 'WARNING — CHAIN BROKEN'}</span></td></tr>
+  <tr><td><strong>Storage</strong></td><td>Immutable, read-only evidence files with cryptographic hash chain</td></tr>
+  <tr><td><strong>Tamper Detection</strong></td><td>Each record contains SHA-256 hash of previous record. Chain verified at report generation.</td></tr>
+</table>
+
+<div class="footer">
+  Generated by Reflex — Kubernetes SOC 2 Compliance Evidence Platform${S.meta ? ' v'+S.meta.version : ''}<br>
+  Evidence records are stored on-cluster with SHA-256 hash chain for tamper detection.<br>
+  This report covers the ${esc(d.namespace)} namespace on cluster ${esc(d.clusterName)}.
+</div>
+
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  const style = document.createElement('style');
+  style.textContent = `@keyframes pulse { 0%,100%{box-shadow:0 0 8px rgba(244,67,54,0.25)} 50%{box-shadow:0 0 20px rgba(244,67,54,0.5)} }`;
+  document.head.appendChild(style);
+  fetchAll();
+});
+window.addEventListener('resize', () => setTimeout(drawLines, 50));
+setInterval(fetchAll, 60000);
+</script>
+
+</body>
+</html>

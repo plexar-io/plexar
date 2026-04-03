@@ -1,0 +1,7 @@
+{
+  "cve": 30,
+  "blast": 25,
+  "policyGap": 20,
+  "permissions": 15,
+  "sensitivity": 10
+}

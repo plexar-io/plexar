@@ -1,0 +1,268 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Cluster Risk Score",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "reflex_cluster_risk_score",
+          "legendFormat": "{{ cluster }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 75 }
+            ]
+          },
+          "unit": "none",
+          "max": 100
+        }
+      }
+    },
+    {
+      "title": "Total Pods Scanned",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "reflex_total_pods",
+          "legendFormat": "{{ namespace }}"
+        }
+      ]
+    },
+    {
+      "title": "NetworkPolicies",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "reflex_network_policies_count",
+          "legendFormat": "{{ namespace }}"
+        }
+      ]
+    },
+    {
+      "title": "Pods by Risk Tier",
+      "type": "piechart",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "reflex_pods_by_tier",
+          "legendFormat": "{{ tier }}"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "critical" }, "properties": [{ "id": "color", "value": { "fixedColor": "#f85149", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "high" }, "properties": [{ "id": "color", "value": { "fixedColor": "#d29922", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "medium" }, "properties": [{ "id": "color", "value": { "fixedColor": "#58a6ff", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "low" }, "properties": [{ "id": "color", "value": { "fixedColor": "#3fb950", "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "title": "Unprotected Pods (No NetworkPolicy)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "count(reflex_pod_has_network_policy == 0)",
+          "legendFormat": "unprotected"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Compliance Scores",
+      "type": "bargauge",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [
+        {
+          "expr": "reflex_compliance_score",
+          "legendFormat": "{{ framework }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Cluster Risk Score Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "reflex_cluster_risk_score",
+          "legendFormat": "{{ cluster }}/{{ namespace }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 75 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Top 10 Pods by Blast Radius Score",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "topk(10, reflex_pod_blast_radius)",
+          "legendFormat": "{{ pod }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 75 }
+            ]
+          }
+        }
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" }
+    },
+    {
+      "title": "CVEs by Severity Per Pod",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "reflex_pod_cve_count{severity=\"critical\"}",
+          "legendFormat": "{{ pod }} critical"
+        },
+        {
+          "expr": "reflex_pod_cve_count{severity=\"high\"}",
+          "legendFormat": "{{ pod }} high"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 1, "fillOpacity": 20 } }
+      }
+    },
+    {
+      "title": "Reachable Services Per Pod",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "topk(10, reflex_pod_reachable_services)",
+          "legendFormat": "{{ pod }}"
+        }
+      ],
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 8 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "NetworkPolicy Coverage Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "reflex_network_policies_count",
+          "legendFormat": "policies"
+        },
+        {
+          "expr": "count(reflex_pod_has_network_policy == 1)",
+          "legendFormat": "protected pods"
+        },
+        {
+          "expr": "count(reflex_pod_has_network_policy == 0)",
+          "legendFormat": "unprotected pods"
+        }
+      ]
+    },
+    {
+      "title": "Compliance Score Trend",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "reflex_compliance_score",
+          "legendFormat": "{{ framework }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "unit": "percent",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 }
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["kubernetes", "security", "reflex", "blast-radius"],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "query",
+        "query": "label_values(reflex_total_pods, namespace)",
+        "current": { "text": "All", "value": "$__all" },
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "Reflex — Blast Radius Intelligence",
+  "uid": "reflex-blast-radius",
+  "version": 1
+}
