@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/plexar-security/plexar/cmd"
+	"github.com/plexar-io/plexar/cmd"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/plexar-security/plexar/pkg/mcp"
+	"github.com/plexar-io/plexar/pkg/mcp"
 	"github.com/spf13/cobra"
 )
 

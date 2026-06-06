@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/classifier"
 )
 
 // Graph is an in-memory attack graph built from scan results.
@@ -55,6 +56,21 @@ func Build(scores []types.PlexarScore, rbacFindings []types.RBACFinding) *Graph 
 		}
 
 		g.addNode(podID, "pod", score.PodName, score.Total, meta)
+
+		// Attach CVEs to node for exploit chain traversal
+		if node, ok := g.Nodes[podID]; ok {
+			if score.Vulns.TopCVEs != nil {
+				node.CVEs = ClassifyCVEs(score.Vulns.TopCVEs)
+			}
+			// Mark agent nodes based on workload class
+			if classifier.IsAgentClass(score.WorkloadClass) {
+				node.IsAgent = true
+				if node.Metadata == nil {
+					node.Metadata = make(map[string]string)
+				}
+				node.Metadata["agent"] = "true"
+			}
+		}
 
 		// Edge: internet -> pod (if internet-exposed)
 		if score.Blast.InternetAccess {

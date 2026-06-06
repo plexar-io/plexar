@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
-	"github.com/plexar-security/plexar/pkg/api"
-	"github.com/plexar-security/plexar/pkg/classifier"
-	"github.com/plexar-security/plexar/pkg/report"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/api"
+	"github.com/plexar-io/plexar/pkg/classifier"
+	"github.com/plexar-io/plexar/pkg/report"
 )
 
 // Server implements a Model Context Protocol (MCP) server over stdio

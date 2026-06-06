@@ -330,7 +330,7 @@ existing cluster configuration.
    publicly available on GitHub before the conference. Attendees can clone the
    repository and run the tool against their own clusters during or after the
    talk.
-   URL: https://github.com/plexar-security/plexar
+   URL: https://github.com/plexar-io/plexar
 
 2. Live Demo Environment
    A pre-configured multi-namespace Kubernetes cluster (using kind or k3d)
@@ -390,7 +390,7 @@ conference date.
 ## TOOL INFORMATION
 
     Name:     Reflex
-    URL:      https://github.com/plexar-security/plexar
+    URL:      https://github.com/plexar-io/plexar
     License:  Apache 2.0
     Language: Go
     Platform: Kubernetes (any distribution)

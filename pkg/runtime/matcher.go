@@ -3,7 +3,7 @@ package runtime
 import (
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // MatchInUse cross-references runtime profiles against Trivy SBOM (VulnSummary)

@@ -3,7 +3,7 @@ package compliance
 import (
 	"fmt"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // MapAll maps scan results to all supported compliance frameworks

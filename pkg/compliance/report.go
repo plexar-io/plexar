@@ -6,7 +6,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // ExportCSV writes compliance results as CSV

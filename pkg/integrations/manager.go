@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
-	"github.com/plexar-security/plexar/pkg/integrations/drata"
-	"github.com/plexar-security/plexar/pkg/integrations/vanta"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/integrations/drata"
+	"github.com/plexar-io/plexar/pkg/integrations/vanta"
 )
 
 // Provider represents a compliance platform integration

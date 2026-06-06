@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // WebhookSink pushes evidence records as JSON POST to a configurable URL

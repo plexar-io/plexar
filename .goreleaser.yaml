@@ -1,0 +1,102 @@
+project_name: plexar
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: plexar
+    main: ./main.go
+    binary: plexar
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/plexar-io/plexar"
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/plexar-io/plexar"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/plexar-io/plexar:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-amd64"
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/plexar-io/plexar:latest"
+    image_templates:
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-amd64"
+      - "ghcr.io/plexar-io/plexar:{{ .Version }}-arm64"
+
+brews:
+  - name: plexar
+    repository:
+      owner: plexar-io
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://plexar-io.io/"
+    description: "The security, compliance, and runtime intelligence layer for Kubernetes workloads"
+    license: "Apache-2.0"
+    install: |
+      bin.install "plexar"
+    test: |
+      system "#{bin}/plexar", "version"
+
+release:
+  github:
+    owner: plexar-io
+    name: plexar
+  prerelease: auto
+  name_template: "v{{ .Version }}"

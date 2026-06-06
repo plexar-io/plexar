@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reflex — Kubernetes Blast Radius Intelligence</title>
+<title>Plexar — Kubernetes Blast Radius Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   :root {
     --bg-primary: #0a1929;
@@ -187,28 +188,28 @@
   .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 12px; }
   .sparkline .bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 5px; transition: height 0.3s; }
 
-  /* ─── Network Graph ─── */
+  /* ─── Network Graph (D3 Force) ─── */
   .graph-container {
-    height: 480px; position: relative;
+    height: 700px; position: relative;
     background: radial-gradient(ellipse at center, #0d2a4a 0%, var(--bg-primary) 70%);
     border-radius: var(--radius-sm); overflow: hidden;
   }
-  .graph-node {
-    position: absolute; padding: 8px 14px; border-radius: var(--radius-sm);
-    font-size: 12px; font-weight: 500; cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    border: 2px solid; z-index: 2; backdrop-filter: blur(4px);
+  .graph-container svg { width: 100%; height: 100%; }
+  .graph-container .link { fill: none; stroke-linecap: round; }
+  .graph-container .link.configured { stroke: #42a5f5; stroke-opacity: 0.6; }
+  .graph-container .link.unrestricted { stroke: #ef5350; stroke-opacity: 0.25; stroke-dasharray: 6,4; }
+  .graph-container .link.internet { stroke: #ab47bc; stroke-opacity: 0.5; stroke-dasharray: 4,3; }
+  .graph-container .link.spoke { stroke: #1e88e5; stroke-opacity: 0.06; stroke-dasharray: 2,4; display: none; }
+  .graph-container .node-box { cursor: pointer; transition: filter 0.15s, opacity 0.2s; }
+  .graph-container .node-box:hover { filter: brightness(1.25); }
+  .graph-container .node-name { font-size: 13px; font-weight: 500; pointer-events: none; }
+  .graph-container .node-score-text { font-size: 10px; pointer-events: none; fill: var(--text-secondary); }
+  .graph-tooltip {
+    position: absolute; display: none; padding: 10px 14px; border-radius: 8px;
+    background: rgba(13,33,55,0.96); border: 1px solid var(--border); color: var(--text-primary);
+    font-size: 11px; pointer-events: none; z-index: 10; white-space: nowrap; line-height: 1.5;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
   }
-  .graph-node:hover { transform: scale(1.1); z-index: 10; }
-  .graph-node.critical { background: rgba(244,67,54,0.12); border-color: var(--error); color: var(--error-light); }
-  .graph-node.high { background: rgba(255,167,38,0.12); border-color: var(--warning); color: var(--warning); }
-  .graph-node.medium { background: var(--primary-bg); border-color: var(--primary-light); color: var(--primary-light); }
-  .graph-node.low { background: var(--success-bg); border-color: var(--success); color: var(--success); }
-  .graph-node.internet { background: var(--purple-bg); border-color: var(--purple); color: var(--purple); }
-  .graph-node.dimmed { opacity: 0.12; }
-  .graph-node .score-tiny { font-size: 10px; opacity: 0.7; margin-left: 4px; }
-  .graph-node .node-ports { font-size: 9px; opacity: 0.5; display: block; margin-top: 2px; }
-  svg.graph-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
   .graph-legend {
     position: absolute; bottom: 12px; left: 12px;
     display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); z-index: 3;
@@ -351,6 +352,17 @@
     font-size: 12px; font-weight: 500; color: var(--text-secondary);
     text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;
   }
+
+  /* ─── Scan Banner ─── */
+  .scan-banner {
+    display: none; align-items: center; gap: 10px;
+    background: var(--warning-bg); border: 1px solid var(--warning);
+    border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px;
+    font-size: 13px; color: var(--warning);
+  }
+  .scan-banner.active { display: flex; }
+  .scan-banner .mi { font-size: 18px; animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -358,10 +370,9 @@
 <!-- ═══ SIDEBAR ═══ -->
 <div class="sidebar">
   <div class="sidebar-brand">
-    <div class="logo">R</div>
+    <div class="logo">P</div>
     <div>
-      <span class="name">Reflex</span>
-      <span class="edition" id="sidebar-edition">Enterprise</span>
+      <span class="name">Plexar</span>
     </div>
   </div>
   
@@ -433,8 +444,13 @@
         <button class="btn btn-primary" onclick="exportPDF()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">download</span> Export Report</button>
       </div>
     </div>
+    <div class="scan-banner" id="scan-banner">
+      <span class="mi">sync</span>
+      <span id="scan-banner-text">Scan in progress... Dashboard data will update automatically when complete.</span>
+    </div>
     <div class="page-content">
       <div class="grid-4" style="margin-bottom:20px" id="dash-stats"></div>
+      <div class="grid-4" style="margin-bottom:20px" id="dash-chain-stats"></div>
       <div class="grid-2" style="margin-bottom:18px">
         <div class="card">
           <div class="card-header">
@@ -448,10 +464,10 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <h2>Activity Feed</h2>
-            <div class="card-actions"><button class="btn" onclick="showPage('alerts')">View All</button></div>
+            <h2>Top Exploit Chains</h2>
+            <div class="card-actions"><button class="btn" onclick="showPage('attackpath')">View All</button></div>
           </div>
-          <div id="dash-activity"><div style="color:var(--text-secondary);padding:16px;font-size:13px">No recent events</div></div>
+          <div id="dash-chains"><div style="color:var(--text-secondary);padding:16px;font-size:13px">Analyzing exploit chains...</div></div>
         </div>
       </div>
       <div class="grid-3" id="dash-compliance"></div>
@@ -465,7 +481,7 @@
     <div class="topbar">
       <h1>Network Topology</h1>
       <div class="topbar-right">
-        <select class="btn" style="appearance:auto" id="topo-ns-filter" onchange="fetchAll()"></select>
+        <select class="btn" style="appearance:auto" id="topo-ns-filter" onchange="onNsFilterChange()"></select>
       </div>
     </div>
     <div class="page-content">
@@ -477,15 +493,9 @@
           <button class="graph-btn" onclick="setView('selected')" id="btn-selected">Selected Pod Blast Radius</button>
         </div>
         <div class="graph-container" id="graph">
-          <svg class="graph-lines" id="graphLines">
-            <defs>
-              <marker id="arrow-configured" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#42a5f5"/></marker>
-              <marker id="arrow-danger" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ef5350"/></marker>
-              <marker id="arrow-internet" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6 z" fill="#ab47bc"/></marker>
-            </defs>
-          </svg>
-          <div id="graph-nodes"></div>
+          <div class="graph-tooltip" id="graph-tooltip"></div>
           <div class="graph-legend">
+            <span><div class="legend-dot" style="background:#1e88e5;width:12px;height:12px;border:2px solid #90caf9"></div> Namespace</span>
             <span><div class="legend-line" style="background:var(--primary-light)"></div> Configured</span>
             <span><div class="legend-line" style="background:var(--error-light);opacity:0.4"></div> Unrestricted</span>
             <span><div class="legend-line" style="background:var(--purple)"></div> Internet</span>
@@ -753,6 +763,7 @@ const S = {
   integrations: null,
   runtime: null,
   attackpath: null,
+  chains: null,
 };
 
 const TIER_COLORS = { critical:'#ef5350', high:'#ffa726', medium:'#42a5f5', low:'#66bb6a' };
@@ -784,7 +795,7 @@ function showPage(pageId) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + pageId).classList.add('active');
   if (event && event.currentTarget) event.currentTarget.classList.add('active');
-  if (pageId === 'topology') setTimeout(drawLines, 100);
+  if (pageId === 'topology') setTimeout(renderTopology, 100);
 }
 
 // ═══════════════════════════════════════
@@ -808,8 +819,11 @@ async function fetchAll() {
       fetch('/api/integrations').then(r => r.ok ? r.json() : null),
       fetch('/api/runtime').then(r => r.ok ? r.json() : null),
       fetch('/api/attackpath').then(r => r.ok ? r.json() : null),
+      fetch('/api/chains').then(r => r.ok ? r.json() : null),
+      fetch('/api/scan/status').then(r => r.ok ? r.json() : null),
     ]);
-    if (results[0].status === 'fulfilled' && results[0].value) S.scan = results[0].value;
+    // Only update S.scan if we got real scan data (not a pending status)
+    if (results[0].status === 'fulfilled' && results[0].value && results[0].value.scores) S.scan = results[0].value;
     if (results[1].status === 'fulfilled') S.history = results[1].value || [];
     if (results[2].status === 'fulfilled') S.compliance = results[2].value || [];
     if (results[3].status === 'fulfilled') S.alertRules = results[3].value || [];
@@ -824,6 +838,17 @@ async function fetchAll() {
     if (results[12].status === 'fulfilled') S.integrations = results[12].value;
     if (results[13].status === 'fulfilled') S.runtime = results[13].value;
     if (results[14].status === 'fulfilled') S.attackpath = results[14].value;
+    if (results[15].status === 'fulfilled') S.chains = results[15].value;
+    // Toggle scan banner
+    const scanStatus = results[16].status === 'fulfilled' ? results[16].value : null;
+    const banner = document.getElementById('scan-banner');
+    if (banner) {
+      if (scanStatus && scanStatus.scanning) {
+        banner.classList.add('active');
+      } else {
+        banner.classList.remove('active');
+      }
+    }
   } catch (err) {
     console.warn('API not available:', err.message);
   }
@@ -995,55 +1020,447 @@ function renderDashboard() {
       }).join('')}</div>
     </div>`;
   }).join('');
+
+  // ── Exploit Chain Stats Row ──
+  const ch = S.chains || {};
+  const chSummary = ch.summary || {};
+  const chList = ch.chains || [];
+  const totalChains = chSummary.totalChains || 0;
+  const critChains = chSummary.criticalChains || 0;
+  const agentChains = chSummary.agentChains || 0;
+  const breakFix = chSummary.topBreakFix || {};
+
+  document.getElementById('dash-chain-stats').innerHTML = `
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">link</span></div>
+      <div class="stat-label">Exploit Chains</div>
+      <div class="stat-value" style="color:var(--error-light)">${totalChains}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">local_fire_department</span></div>
+      <div class="stat-label">Critical Chains</div>
+      <div class="stat-value" style="color:var(--warning)">${critChains}</div>
+    </div>
+    <div class="stat-card accent-blue">
+      <div class="stat-icon blue"><span class="mi">smart_toy</span></div>
+      <div class="stat-label">Agent-Involved</div>
+      <div class="stat-value" style="color:var(--primary-light)">${agentChains}</div>
+    </div>
+    <div class="stat-card accent-success">
+      <div class="stat-icon green"><span class="mi">healing</span></div>
+      <div class="stat-label">Top Break-the-Chain Fix</div>
+      <div class="stat-value" style="font-size:13px;color:var(--success);line-height:1.3">${breakFix.cveId ? esc(breakFix.cveId) + '<br><span style="font-size:11px;color:var(--text-secondary)">on ' + esc(shortPod(breakFix.podName)) + ' (' + breakFix.chainsEliminated + ' chains)</span>' : '<span style="color:var(--text-secondary)">None needed</span>'}</div>
+    </div>`;
+
+  // ── Top Exploit Chains Panel ──
+  const chainsEl = document.getElementById('dash-chains');
+  if (totalChains === 0) {
+    chainsEl.innerHTML = `<div style="text-align:center;padding:30px">
+      <span class="mi" style="font-size:36px;display:block;margin-bottom:8px;opacity:0.3;color:var(--success)">verified_user</span>
+      <div style="font-size:14px;font-weight:500;color:var(--success)">No Exploit Chains</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">No CVE-validated attack chains detected</div>
+    </div>`;
+  } else {
+    const sevColors = { critical: 'var(--error-light)', high: 'var(--warning)', medium: 'var(--primary-light)', low: 'var(--success)' };
+    const top5 = chList.slice(0, 5);
+    chainsEl.innerHTML = top5.map(c => {
+      const sevCol = sevColors[c.severity] || 'var(--text-secondary)';
+      const hops = c.hops || [];
+      const hopFlow = hops.map((h, i) => {
+        const pod = shortPod(h.podName);
+        const arrow = i < hops.length - 1 ? `<span style="color:var(--text-disabled);margin:0 4px">\u2192</span>` : '';
+        return `<span style="color:var(--primary-light);font-weight:500" title="${esc(h.cve.id)} (${h.exploitType})">${esc(pod)}</span>${arrow}`;
+      }).join('');
+      const target = c.finalTarget ? `<span style="color:var(--text-disabled);margin:0 4px">\u2192</span><span style="color:${sevCol};font-weight:500">${esc(c.finalTarget)}</span>` : '';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+        <span class="badge-sm" style="background:${sevCol}22;color:${sevCol};min-width:28px;text-align:center">${Math.round(c.chainScore)}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${hopFlow}${target}</div>
+          <div style="font-size:10px;color:var(--text-disabled);margin-top:2px">${hops.map(h => h.exploitType).join(' \u2192 ')} &middot; ${hops.length} hop${hops.length !== 1 ? 's' : ''}</div>
+        </div>
+        <span class="badge-sm badge-${c.severity}" style="font-size:9px">${c.severity.charAt(0).toUpperCase() + c.severity.slice(1)}</span>
+      </div>`;
+    }).join('');
+  }
 }
 
 // ═══════════════════════════════════════
-// TOPOLOGY
+// TOPOLOGY — D3 Force-Directed Graph
 // ═══════════════════════════════════════
 let currentView = 'configured';
 let topoScores = [];
+let topoSim = null; // D3 simulation reference
 
 function renderTopology() {
   if (!S.scan || !S.scan.scores) return;
-  topoScores = S.scan.scores;
-  const container = document.getElementById('graph-nodes');
+  const container = document.getElementById('graph');
   if (!container) return;
 
-  // Layout pods in a grid
-  const pods = topoScores.slice(0, 15);
-  const cols = Math.ceil(Math.sqrt(pods.length + 1));
-  container.innerHTML = '';
+  const nsFilter = document.getElementById('topo-ns-filter')?.value || '';
+  topoScores = nsFilter ? S.scan.scores.filter(s => s.namespace === nsFilter) : S.scan.scores;
 
-  pods.forEach((s, i) => {
-    const row = Math.floor(i / cols), col = i % cols;
-    const left = 5 + col * (85 / cols);
-    const top = 5 + row * (75 / Math.ceil(pods.length / cols));
-    const node = document.createElement('div');
-    node.className = 'graph-node ' + s.tier;
-    node.id = 'node-' + s.podName;
-    node.style.left = left + '%';
-    node.style.top = top + '%';
-    node.innerHTML = `${esc(shortPod(s.podName))} <span class="score-tiny">${s.total}</span>`;
-    node.onclick = () => selectTopoPod(s.podName);
-    container.appendChild(node);
+  if (topoSim) { topoSim.stop(); topoSim = null; }
+  d3.select('#graph svg.force-graph').remove();
+
+  const W = container.clientWidth || 960;
+  const H = container.clientHeight || 700;
+  const nsLabel = nsFilter || S.scan.namespace || 'cluster';
+  const BOX_W = 140, BOX_H = 44, BOX_R = 6;
+
+  // ─── Build pod node data ───
+  const nodeMap = {};
+  topoScores.forEach(s => {
+    nodeMap[s.podName] = { id: s.podName, label: shortPod(s.podName), type: 'pod', tier: s.tier, score: s.total, x: 0, y: 0 };
+  });
+
+  // ─── Build links (pod↔pod only, no spokes) ───
+  const links = [];
+  const added = new Set();
+  const addLink = (src, tgt, type) => {
+    const key = `${src}→${tgt}→${type}`;
+    if (added.has(key)) return;
+    let resolved = tgt;
+    if (!nodeMap[tgt]) {
+      const m = Object.keys(nodeMap).find(k => k.startsWith(tgt + '-'));
+      if (m) resolved = m; else return;
+    }
+    if (!nodeMap[src]) return;
+    added.add(key);
+    links.push({ source: src, target: resolved, type });
+  };
+  const hasInternet = topoScores.some(s => s.blast.internetAccess);
+  topoScores.forEach(s => {
+    (s.blast.configuredTargets || []).forEach(t => addLink(s.podName, t, 'configured'));
+    if (!s.blast.hasNetworkPolicy) {
+      (s.blast.reachableTargets || []).forEach(t => {
+        if (t !== s.podName && !t.includes('.')) addLink(s.podName, t, 'unrestricted');
+      });
+    }
+    if (s.blast.internetAccess) addLink(s.podName, '__internet__', 'internet');
+  });
+
+  // ═══ STEP 1: Find connected components via BFS ═══
+  const adj = {};
+  const podIds = topoScores.map(s => s.podName);
+  podIds.forEach(id => { adj[id] = new Set(); });
+  links.forEach(l => {
+    if (l.type === 'internet') return;
+    if (adj[l.source] && adj[l.target]) {
+      adj[l.source].add(l.target);
+      adj[l.target].add(l.source);
+    }
+  });
+
+  const visited = new Set();
+  const clusters = [];
+  podIds.forEach(id => {
+    if (visited.has(id)) return;
+    const cluster = [];
+    const queue = [id];
+    visited.add(id);
+    while (queue.length) {
+      const cur = queue.shift();
+      cluster.push(cur);
+      for (const nb of adj[cur] || []) {
+        if (!visited.has(nb)) { visited.add(nb); queue.push(nb); }
+      }
+    }
+    clusters.push(cluster);
+  });
+  clusters.sort((a, b) => b.length - a.length);
+
+  // ═══ STEP 2: Layout each cluster as hub + rings ═══
+  function layoutCluster(cluster, ox, oy) {
+    if (cluster.length === 1) {
+      nodeMap[cluster[0]].x = ox;
+      nodeMap[cluster[0]].y = oy;
+      return;
+    }
+    // Find hub: most connections within the cluster
+    const clusterSet = new Set(cluster);
+    let hub = cluster[0], maxDeg = 0;
+    cluster.forEach(id => {
+      const deg = [...(adj[id] || [])].filter(n => clusterSet.has(n)).length;
+      if (deg > maxDeg) { maxDeg = deg; hub = id; }
+    });
+
+    // BFS from hub to assign rings
+    const rings = [[hub]];
+    const placed = new Set([hub]);
+    let frontier = [hub];
+    while (placed.size < cluster.length) {
+      const next = [];
+      for (const id of frontier) {
+        for (const nb of adj[id] || []) {
+          if (clusterSet.has(nb) && !placed.has(nb)) {
+            placed.add(nb);
+            next.push(nb);
+          }
+        }
+      }
+      if (next.length === 0) {
+        // Remaining disconnected-within-cluster nodes
+        cluster.forEach(id => { if (!placed.has(id)) { next.push(id); placed.add(id); } });
+      }
+      if (next.length) rings.push(next);
+      frontier = next;
+    }
+
+    // Place hub at center
+    nodeMap[hub].x = ox;
+    nodeMap[hub].y = oy;
+
+    // Place each ring concentrically — radius scales with node count
+    const nodeSpacing = BOX_W + 6; // min arc-distance between nodes on ring
+    let prevRadius = 0;
+    for (let ri = 1; ri < rings.length; ri++) {
+      const ring = rings[ri];
+      // Radius must be large enough so nodes don't overlap on the circumference
+      const minRadiusByCount = (ring.length * nodeSpacing) / (2 * Math.PI);
+      const minRadiusByGap = prevRadius + BOX_H + 30; // overlap resolver catches remaining collisions
+      const radius = Math.max(minRadiusByCount, minRadiusByGap);
+      prevRadius = radius;
+      ring.forEach((id, i) => {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / ring.length;
+        nodeMap[id].x = ox + radius * Math.cos(angle);
+        nodeMap[id].y = oy + radius * Math.sin(angle);
+      });
+    }
+  }
+
+  // ═══ STEP 3: Pack clusters on the canvas ═══
+  // Estimate bounding radius per cluster based on actual node count
+  const clusterMeta = clusters.map(c => {
+    // Largest ring in BFS will likely have the most nodes — estimate conservatively
+    const maxRingCount = Math.min(c.length - 1, Math.ceil(c.length * 0.6));
+    const outerRadius = Math.max(35, (maxRingCount * (BOX_W + 6)) / (2 * Math.PI), Math.ceil(Math.sqrt(c.length)) * 40);
+    return { ids: c, radius: outerRadius + BOX_W / 2 };
+  });
+
+  // Available area (leave room for namespace at bottom, internet at top-right)
+  const areaTop = 50, areaBottom = H - 80;
+  const areaLeft = 50, areaRight = W - 50;
+  const areaW = areaRight - areaLeft;
+  const areaH = areaBottom - areaTop;
+
+  // Simple row-based packing
+  let curX = areaLeft, curY = areaTop, rowH = 0;
+  clusterMeta.forEach(cm => {
+    const diam = cm.radius * 2 + 10;
+    if (curX + diam > areaRight && curX > areaLeft) {
+      curX = areaLeft;
+      curY += rowH + 10;
+      rowH = 0;
+    }
+    const cx = curX + cm.radius + 5;
+    const cy = curY + cm.radius + 5;
+    layoutCluster(cm.ids, cx, cy);
+    curX += diam;
+    rowH = Math.max(rowH, diam);
+  });
+
+  // ═══ STEP 4: Build final node list for rendering ═══
+  const allNodes = [];
+  // Pod nodes first
+  podIds.forEach(id => allNodes.push(nodeMap[id]));
+
+  // ─── Overlap resolver: guarantee no pod overlaps any other ───
+  const PAD_X = BOX_W + 14, PAD_Y = BOX_H + 10;
+  for (let iter = 0; iter < 50; iter++) {
+    let moved = false;
+    for (let i = 0; i < allNodes.length; i++) {
+      for (let j = i + 1; j < allNodes.length; j++) {
+        const a = allNodes[i], b = allNodes[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const overlapX = PAD_X - Math.abs(dx), overlapY = PAD_Y - Math.abs(dy);
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX < overlapY) {
+            const push = overlapX / 2 + 2;
+            a.x -= (dx >= 0 ? push : -push);
+            b.x += (dx >= 0 ? push : -push);
+          } else {
+            const push = overlapY / 2 + 2;
+            a.y -= (dy >= 0 ? push : -push);
+            b.y += (dy >= 0 ? push : -push);
+          }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  // Place namespace and internet OUTSIDE pod bounding box
+  let podMinY = Infinity, podMaxY = -Infinity, podMinX = Infinity, podMaxX = -Infinity;
+  allNodes.forEach(n => {
+    podMinX = Math.min(podMinX, n.x); podMaxX = Math.max(podMaxX, n.x);
+    podMinY = Math.min(podMinY, n.y); podMaxY = Math.max(podMaxY, n.y);
+  });
+  const midX = (podMinX + podMaxX) / 2;
+  // Namespace below all pods
+  const nsNode = { id: '__ns__', label: nsLabel, type: 'ns', x: midX, y: podMaxY + 70 };
+  allNodes.push(nsNode);
+  // Internet above all pods, right side
+  if (hasInternet) {
+    allNodes.push({ id: '__internet__', label: 'INTERNET', type: 'internet', x: podMaxX, y: podMinY - 50 });
+  }
+
+  // Positions lookup for links
+  const pos = {};
+  allNodes.forEach(n => { pos[n.id] = { x: n.x, y: n.y }; });
+
+  // ─── Auto-fit via SVG viewBox (scales positions AND shapes uniformly) ───
+  let vbMinX = Infinity, vbMaxX = -Infinity, vbMinY = Infinity, vbMaxY = -Infinity;
+  allNodes.forEach(n => {
+    vbMinX = Math.min(vbMinX, n.x - BOX_W); vbMaxX = Math.max(vbMaxX, n.x + BOX_W);
+    vbMinY = Math.min(vbMinY, n.y - BOX_H); vbMaxY = Math.max(vbMaxY, n.y + BOX_H);
+  });
+  const vbPad = 30;
+  const vbX = vbMinX - vbPad, vbY = vbMinY - vbPad;
+  const vbW = (vbMaxX - vbMinX) + vbPad * 2;
+  const vbH = (vbMaxY - vbMinY) + vbPad * 2;
+
+  // ─── SVG setup ───
+  const svg = d3.select('#graph').insert('svg', ':first-child')
+    .attr('class', 'force-graph').attr('width', W).attr('height', H)
+    .attr('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const defs = svg.append('defs');
+  [['configured','#42a5f5'],['unrestricted','#ef5350'],['internet','#ab47bc']].forEach(([name, color]) => {
+    defs.append('marker').attr('id', `arr-${name}`).attr('viewBox','0 0 10 6')
+      .attr('refX', 28).attr('refY', 3).attr('markerWidth', 8).attr('markerHeight', 6).attr('orient','auto')
+      .append('path').attr('d','M 0 0 L 10 3 L 0 6 z').attr('fill', color);
+  });
+  const glow = defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+  glow.append('feGaussianBlur').attr('stdDeviation','4').attr('result','blur');
+  glow.append('feMerge').selectAll('feMergeNode').data(['blur','SourceGraphic']).enter().append('feMergeNode').attr('in',d=>d);
+
+  const root = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', e => root.attr('transform', e.transform)));
+
+  // ─── Draw links ───
+  const linkEls = root.append('g').selectAll('path').data(links.filter(l => l.type !== 'spoke')).enter().append('path')
+    .attr('class', d => `link ${d.type}`)
+    .attr('stroke-width', d => d.type === 'configured' ? 2 : 1.3)
+    .attr('marker-end', d => `url(#arr-${d.type})`)
+    .attr('d', d => {
+      const s = pos[d.source] || pos['__ns__'];
+      const t = pos[d.target] || pos['__internet__'] || s;
+      const dx = t.x - s.x, dy = t.y - s.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 1) return `M${s.x},${s.y}L${t.x},${t.y}`;
+      const curve = dist * 0.5;
+      return `M${s.x},${s.y}A${curve},${curve} 0 0,1 ${t.x},${t.y}`;
+    });
+
+  // ─── Draw nodes ───
+  const nodeEls = root.append('g').selectAll('g').data(allNodes).enter().append('g')
+    .attr('class', 'node-box')
+    .attr('transform', d => `translate(${d.x},${d.y})`)
+    .call(d3.drag()
+      .on('drag', (e, d) => {
+        d.x = e.x; d.y = e.y;
+        d3.select(e.sourceEvent.target.closest('.node-box')).attr('transform', `translate(${d.x},${d.y})`);
+        pos[d.id] = { x: d.x, y: d.y };
+        // Redraw connected links
+        linkEls.attr('d', l => {
+          const s = pos[l.source] || pos['__ns__'];
+          const t = pos[l.target] || pos['__internet__'] || s;
+          const dx = t.x - s.x, dy = t.y - s.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 1) return `M${s.x},${s.y}L${t.x},${t.y}`;
+          const curve = dist * 0.5;
+          return `M${s.x},${s.y}A${curve},${curve} 0 0,1 ${t.x},${t.y}`;
+        });
+      })
+    );
+
+  // Namespace node
+  nodeEls.filter(d => d.type === 'ns').each(function(d) {
+    const el = d3.select(this);
+    el.append('rect').attr('x', -65).attr('y', -20).attr('width', 130).attr('height', 40)
+      .attr('rx', 8).attr('fill', '#1e88e5').attr('fill-opacity', 0.15).attr('stroke', '#90caf9').attr('stroke-width', 2);
+    el.append('text').attr('text-anchor','middle').attr('dy', 1).attr('fill','#90caf9').attr('font-size','12px').attr('font-weight','600').text(d.label);
+    el.append('text').attr('text-anchor','middle').attr('dy', 14).attr('fill','#64b5f6').attr('font-size','9px').text(topoScores.length + ' pods');
   });
 
   // Internet node
-  const inetNode = document.createElement('div');
-  inetNode.className = 'graph-node internet';
-  inetNode.id = 'node-internet';
-  inetNode.style.left = '82%'; inetNode.style.top = '85%';
-  inetNode.innerHTML = 'INTERNET<span class="node-ports">0.0.0.0/0</span>';
-  container.appendChild(inetNode);
-
-  // Pulse animation for critical nodes
-  container.querySelectorAll('.graph-node.critical').forEach(n => {
-    n.style.animation = 'pulse 2s ease-in-out infinite';
+  nodeEls.filter(d => d.type === 'internet').each(function(d) {
+    const el = d3.select(this);
+    el.append('rect').attr('x', -45).attr('y', -15).attr('width', 90).attr('height', 30)
+      .attr('rx', 6).attr('fill', '#ab47bc').attr('fill-opacity', 0.12).attr('stroke', '#ce93d8').attr('stroke-width', 1.5);
+    el.append('text').attr('text-anchor','middle').attr('dy', 4).attr('fill','#ce93d8').attr('font-size','9px').attr('font-weight','600').text('INTERNET');
   });
 
-  if (!S.selectedPod && pods.length) S.selectedPod = pods[0].podName;
+  // Pod nodes — rounded rect boxes
+  const podEls = nodeEls.filter(d => d.type === 'pod');
+  podEls.append('rect')
+    .attr('x', -BOX_W/2).attr('y', -BOX_H/2)
+    .attr('width', BOX_W).attr('height', BOX_H)
+    .attr('rx', BOX_R)
+    .attr('fill', d => TIER_COLORS[d.tier] || '#42a5f5')
+    .attr('fill-opacity', 0.1)
+    .attr('stroke', d => TIER_COLORS[d.tier] || '#42a5f5')
+    .attr('stroke-width', 1.5)
+    .style('filter', d => d.tier === 'critical' ? 'url(#glow)' : null);
+  podEls.append('text').attr('class','node-name')
+    .attr('text-anchor','middle').attr('dy', -3)
+    .attr('fill', d => TIER_COLORS[d.tier] || '#42a5f5')
+    .text(d => d.label.length > 18 ? d.label.slice(0,16) + '…' : d.label);
+  podEls.append('text').attr('class','node-score-text')
+    .attr('text-anchor','middle').attr('dy', 12)
+    .text(d => d.score);
+
+  // ─── Tooltip + hover ───
+  const tooltip = document.getElementById('graph-tooltip');
+  nodeEls.on('mouseover', (e, d) => {
+    if (d.type === 'ns') return;
+    const [mx, my] = d3.pointer(e, container);
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mx + 16) + 'px';
+    tooltip.style.top = (my - 8) + 'px';
+    if (d.type === 'internet') { tooltip.innerHTML = '0.0.0.0/0 — Full Internet'; }
+    else {
+      const sc = topoScores.find(s => s.podName === d.id);
+      tooltip.innerHTML = `<b>${d.label}</b> (${d.tier})<br>Score: ${d.score}`
+        + (sc ? `<br>Configured: ${(sc.blast.configuredTargets||[]).length} &middot; Reachable: ${(sc.blast.reachableTargets||[]).length}` : '');
+    }
+    const conn = new Set([d.id]);
+    links.forEach(l => {
+      if (l.source === d.id) conn.add(l.target);
+      if (l.target === d.id) conn.add(l.source);
+    });
+    nodeEls.style('opacity', n => conn.has(n.id) ? 1 : 0.12);
+    linkEls.style('opacity', l => (l.source === d.id || l.target === d.id) ? 1 : 0.04);
+  }).on('mouseout', () => {
+    tooltip.style.display = 'none';
+    nodeEls.style('opacity', 1);
+    linkEls.style('opacity', null);
+  }).on('click', (e, d) => { if (d.type === 'pod') selectTopoPod(d.id); });
+
+  applyViewFilter();
+
+  if (!S.selectedPod || !topoScores.find(s => s.podName === S.selectedPod)) {
+    S.selectedPod = topoScores.length ? topoScores[0].podName : null;
+  }
   if (S.selectedPod) selectTopoPod(S.selectedPod);
-  setTimeout(drawLines, 50);
+}
+
+function applyViewFilter() {
+  const linkEls = d3.selectAll('#graph .link');
+  if (currentView === 'configured') {
+    linkEls.style('display', d => (d.type === 'configured' || d.type === 'spoke') ? null : 'none');
+  } else if (currentView === 'actual') {
+    linkEls.style('display', null);
+  } else if (currentView === 'selected') {
+    linkEls.style('display', d => {
+      if (d.type === 'spoke') return null;
+      const sid = typeof d.source === 'object' ? d.source.id : d.source;
+      const tid = typeof d.target === 'object' ? d.target.id : d.target;
+      return (sid === S.selectedPod || tid === S.selectedPod) ? null : 'none';
+    });
+  }
 }
 
 function selectTopoPod(podName) {
@@ -1072,88 +1489,25 @@ function selectTopoPod(podName) {
     `<tr><td>${esc(c.id)}</td><td class="sev-${c.severity.toLowerCase()}">${c.severity}</td><td>${c.cvss}</td><td>${esc(c.package)}</td></tr>`
   ).join('') : '<tr><td colspan="4" style="color:var(--text-secondary)">No CVE data available</td></tr>';
 
-  if (currentView === 'selected') drawLines();
-}
-
-function getNodeCenter(id) {
-  const node = document.getElementById('node-' + id);
-  if (!node) return null;
-  const container = document.getElementById('graph');
-  const cRect = container.getBoundingClientRect();
-  const nRect = node.getBoundingClientRect();
-  return { x: nRect.left - cRect.left + nRect.width/2, y: nRect.top - cRect.top + nRect.height/2 };
-}
-
-function drawLine(svg, from, to, stroke, width, opacity, marker, dash) {
-  if (!from || !to) return;
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', from.x); line.setAttribute('y1', from.y);
-  line.setAttribute('x2', to.x); line.setAttribute('y2', to.y);
-  line.setAttribute('stroke', stroke); line.setAttribute('stroke-width', width);
-  line.setAttribute('stroke-opacity', opacity);
-  if (marker) line.setAttribute('marker-end', marker);
-  if (dash) line.setAttribute('stroke-dasharray', dash);
-  svg.appendChild(line);
-}
-
-function drawLines() {
-  const svg = document.getElementById('graphLines');
-  if (!svg) return;
-  const defs = svg.querySelector('defs');
-  svg.innerHTML = ''; svg.appendChild(defs);
-  const nodes = document.querySelectorAll('.graph-node');
-  const podNames = topoScores.map(s => s.podName);
-
-  if (currentView === 'configured') {
-    nodes.forEach(n => n.classList.remove('dimmed'));
-    topoScores.forEach(s => {
-      (s.blast.configuredTargets||[]).forEach(t => {
-        const from = getNodeCenter(s.podName), to = getNodeCenter(t);
-        drawLine(svg, from, to, '#42a5f5', '2', '0.7', 'url(#arrow-configured)');
-      });
-    });
-  } else if (currentView === 'actual') {
-    nodes.forEach(n => n.classList.remove('dimmed'));
-    topoScores.forEach(s => {
-      if (!s.blast.hasNetworkPolicy) {
-        (s.blast.reachableTargets||[]).forEach(t => {
-          const from = getNodeCenter(s.podName), to = getNodeCenter(t);
-          drawLine(svg, from, to, '#ef5350', '1', '0.15', 'url(#arrow-danger)', '4,4');
-        });
-        if (s.blast.internetAccess) {
-          const from = getNodeCenter(s.podName), to = getNodeCenter('internet');
-          drawLine(svg, from, to, '#ab47bc', '1', '0.25', 'url(#arrow-internet)', '3,3');
-        }
-      }
-      (s.blast.configuredTargets||[]).forEach(t => {
-        const from = getNodeCenter(s.podName), to = getNodeCenter(t);
-        drawLine(svg, from, to, '#42a5f5', '2', '0.8', 'url(#arrow-configured)');
-      });
-    });
-  } else if (currentView === 'selected' && S.selectedPod) {
-    const sel = topoScores.find(s => s.podName === S.selectedPod);
-    if (!sel) return;
-    const reachable = new Set([...(sel.blast.reachableTargets||[]), ...(sel.blast.configuredTargets||[])]);
-    if (sel.blast.internetAccess) reachable.add('internet');
-    nodes.forEach(n => {
-      const id = n.id.replace('node-','');
-      n.classList.toggle('dimmed', id !== S.selectedPod && !reachable.has(id));
-    });
-    const configured = new Set((sel.blast.configuredTargets||[]));
-    reachable.forEach(target => {
-      const from = getNodeCenter(S.selectedPod), to = getNodeCenter(target);
-      if (target === 'internet') drawLine(svg, from, to, '#ab47bc', '2', '0.7', 'url(#arrow-internet)');
-      else if (configured.has(target)) drawLine(svg, from, to, '#42a5f5', '2.5', '0.9', 'url(#arrow-configured)');
-      else drawLine(svg, from, to, '#ef5350', '1.5', '0.5', 'url(#arrow-danger)', '5,4');
-    });
-  }
+  if (currentView === 'selected') applyViewFilter();
 }
 
 function setView(view) {
   currentView = view;
   document.querySelectorAll('.graph-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + view).classList.add('active');
-  drawLines();
+  applyViewFilter();
+}
+
+function onNsFilterChange() {
+  const ns = document.getElementById('topo-ns-filter')?.value || '';
+  if (ns && S.scan && ns !== S.scan.namespace) {
+    fetch('/api/scan/trigger?namespace=' + encodeURIComponent(ns), { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.status === 'triggered') setTimeout(fetchAll, 3000); })
+      .catch(() => {});
+  }
+  renderTopology();
 }
 
 // ═══════════════════════════════════════
@@ -1311,7 +1665,7 @@ function renderSettings() {
   const m = S.meta || {};
   document.getElementById('settings-scan-config').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div><strong>Scan interval</strong><br><span style="color:var(--text-secondary);font-size:11px">How often Reflex recalculates blast radius</span></div>
+      <div><strong>Scan interval</strong><br><span style="color:var(--text-secondary);font-size:11px">How often Plexar recalculates blast radius</span></div>
       <span class="btn" style="cursor:default">${esc(m.scanInterval || 'N/A')}</span>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1808,7 +2162,7 @@ async function exportPDF() {
   }).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Reflex SOC 2 Compliance Report — ${esc(d.clusterName)}</title>
+<title>Plexar SOC 2 Compliance Report — ${esc(d.clusterName)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1a1a; padding:40px 50px; font-size:11px; line-height:1.5; }
@@ -1834,7 +2188,7 @@ async function exportPDF() {
   @media print { body { padding:20px 30px; } .page-break { page-break-before:always; } }
 </style></head><body>
 
-<h1>Reflex SOC 2 Compliance Report</h1>
+<h1>Plexar SOC 2 Compliance Report</h1>
 <div class="subtitle">Kubernetes Infrastructure Evidence — ${esc(d.namespace)}</div>
 <div class="meta">
   Cluster: <strong>${esc(d.clusterName)}</strong> &nbsp;|&nbsp;
@@ -1867,7 +2221,7 @@ async function exportPDF() {
 
 <div class="page-break"></div>
 <h2>3. SOC 2 Controls — Detailed Evidence</h2>
-<p style="margin-bottom:12px;color:#555">Each control below includes current status, historical pass rate over the evidence period, evidence record count, and the specific evidence collected by Reflex.</p>
+<p style="margin-bottom:12px;color:#555">Each control below includes current status, historical pass rate over the evidence period, evidence record count, and the specific evidence collected by Plexar.</p>
 <table><thead><tr><th>Control</th><th>Name</th><th>Status</th><th>Violations</th><th>Pass Rate</th><th>Records</th><th>Failures</th><th>Last Failed</th></tr></thead><tbody>${controlRows}</tbody></table>
 
 ${driftRows ? `<div class="page-break"></div>
@@ -1889,7 +2243,7 @@ ${driftRows ? `<div class="page-break"></div>
 </table>
 
 <div class="footer">
-  Generated by Reflex — Kubernetes SOC 2 Compliance Evidence Platform${S.meta ? ' v'+S.meta.version : ''}<br>
+  Generated by Plexar — Kubernetes SOC 2 Compliance Evidence Platform${S.meta ? ' v'+S.meta.version : ''}<br>
   Evidence records are stored on-cluster with SHA-256 hash chain for tamper detection.<br>
   This report covers the ${esc(d.namespace)} namespace on cluster ${esc(d.clusterName)}.
 </div>
@@ -1911,7 +2265,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.head.appendChild(style);
   fetchAll();
 });
-window.addEventListener('resize', () => setTimeout(drawLines, 50));
+window.addEventListener('resize', () => setTimeout(renderTopology, 100));
 setInterval(fetchAll, 60000);
 </script>
 

@@ -8,35 +8,40 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
-	"github.com/plexar-security/plexar/pkg/alerting"
-	"github.com/plexar-security/plexar/pkg/api"
-	"github.com/plexar-security/plexar/pkg/auth"
-	"github.com/plexar-security/plexar/pkg/evidence"
-	"github.com/plexar-security/plexar/pkg/history"
-	"github.com/plexar-security/plexar/pkg/ingest"
-	"github.com/plexar-security/plexar/pkg/integrations"
-	"github.com/plexar-security/plexar/pkg/metrics"
-	"github.com/plexar-security/plexar/pkg/netpol"
-	"github.com/plexar-security/plexar/pkg/reporter"
-	"github.com/plexar-security/plexar/pkg/scorer"
-	"github.com/plexar-security/plexar/web"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/alerting"
+	"github.com/plexar-io/plexar/pkg/api"
+	"github.com/plexar-io/plexar/pkg/auth"
+	"github.com/plexar-io/plexar/pkg/evidence"
+	"github.com/plexar-io/plexar/pkg/history"
+	"github.com/plexar-io/plexar/pkg/ingest"
+	"github.com/plexar-io/plexar/pkg/integrations"
+	"github.com/plexar-io/plexar/pkg/metrics"
+	"github.com/plexar-io/plexar/pkg/netpol"
+	"github.com/plexar-io/plexar/pkg/reporter"
+	"github.com/plexar-io/plexar/pkg/scanner"
+	"github.com/plexar-io/plexar/pkg/scorer"
+	"github.com/plexar-io/plexar/web"
 	"github.com/spf13/cobra"
 )
 
 var (
-	servePort     int
-	serveBind     string
-	scanInterval  time.Duration
-	metricsPort   int
-	enableUI      bool
-	alertSlackURL string
-	oidcIssuer    string
-	vantaToken    string
-	drataKey      string
-	evidenceSinks []string
+	servePort       int
+	serveBind       string
+	scanInterval    time.Duration
+	metricsPort     int
+	enableUI        bool
+	alertSlackURL   string
+	oidcIssuer      string
+	vantaToken      string
+	drataKey        string
+	evidenceSinks   []string
+	hubbleRelayAddr string
+	serveVulnSource string
 )
 
 var serveCmd = &cobra.Command{
@@ -52,7 +57,7 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().IntVarP(&servePort, "port", "p", 8080, "API/UI server port")
 	serveCmd.Flags().StringVar(&serveBind, "bind", "0.0.0.0", "Bind address")
-	serveCmd.Flags().DurationVar(&scanInterval, "scan-interval", 5*time.Minute, "How often to recalculate blast radius")
+	serveCmd.Flags().DurationVar(&scanInterval, "scan-interval", 24*time.Hour, "How often to recalculate blast radius")
 	serveCmd.Flags().IntVar(&metricsPort, "metrics-port", 9090, "Prometheus metrics port")
 	serveCmd.Flags().BoolVar(&enableUI, "ui", true, "Enable web dashboard")
 	serveCmd.Flags().StringVar(&alertSlackURL, "alert-slack-url", "", "Slack webhook URL for alerts")
@@ -60,6 +65,54 @@ func init() {
 	serveCmd.Flags().StringVar(&vantaToken, "vanta-token", "", "Vanta API token for automated evidence push")
 	serveCmd.Flags().StringVar(&drataKey, "drata-key", "", "Drata API key for automated evidence push")
 	serveCmd.Flags().StringSliceVar(&evidenceSinks, "evidence-sink", nil, "Evidence sink DSN(s): s3://key:secret@host/bucket or webhook://url")
+	serveCmd.Flags().StringVar(&hubbleRelayAddr, "hubble-relay", "", "Hubble Relay address (host:port); auto-detect if empty")
+	serveCmd.Flags().StringVar(&serveVulnSource, "vuln-source", "trivy", "Vulnerability source: trivy, trivy-operator, none")
+}
+
+// Scan cache — background loop writes, API handlers read
+var (
+	cachedResult   *types.ScanResult
+	cachedResultMu sync.RWMutex
+	scanning       bool
+	scanningMu     sync.RWMutex
+	lastScanTime   time.Time
+	lastScanTimeMu sync.RWMutex
+)
+
+func getCachedResult() *types.ScanResult {
+	cachedResultMu.RLock()
+	defer cachedResultMu.RUnlock()
+	return cachedResult
+}
+
+func setCachedResult(r *types.ScanResult) {
+	cachedResultMu.Lock()
+	defer cachedResultMu.Unlock()
+	cachedResult = r
+}
+
+func setScanning(v bool) {
+	scanningMu.Lock()
+	defer scanningMu.Unlock()
+	scanning = v
+}
+
+func isScanning() bool {
+	scanningMu.RLock()
+	defer scanningMu.RUnlock()
+	return scanning
+}
+
+func setLastScanTime(t time.Time) {
+	lastScanTimeMu.Lock()
+	defer lastScanTimeMu.Unlock()
+	lastScanTime = t
+}
+
+func getLastScanTime() time.Time {
+	lastScanTimeMu.RLock()
+	defer lastScanTimeMu.RUnlock()
+	return lastScanTime
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
@@ -114,25 +167,76 @@ func runServe(cmd *cobra.Command, args []string) error {
 		authMiddleware = auth.NoopMiddleware()
 	}
 
+	// Configure vulnerability source
+	if serveVulnSource != "" {
+		source, err := scanner.NewSource(serveVulnSource)
+		if err != nil {
+			return fmt.Errorf("invalid vuln-source %q: %w", serveVulnSource, err)
+		}
+		api.ActiveVulnSource = source
+		fmt.Fprintf(os.Stderr, "🔍 Vulnerability source: %s\n", source.Name())
+	}
+
+	// Wire Hubble relay address into scan pipeline
+	if hubbleRelayAddr != "" {
+		api.HubbleRelayAddr = hubbleRelayAddr
+		fmt.Fprintf(os.Stderr, "\U0001f310 Hubble Relay: %s\n", hubbleRelayAddr)
+	}
+
 	mux := http.NewServeMux()
 
-	// API endpoints
+	// API endpoints — serve cached scan results (never trigger a live scan)
 	mux.HandleFunc("/api/scan", func(w http.ResponseWriter, r *http.Request) {
-		ns := r.URL.Query().Get("namespace")
-		if ns == "" {
-			ns = namespace
-		}
-		result, err := api.RunScan(kubeconfig, ns, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode(map[string]string{"status": "pending", "message": "Initial scan in progress"})
 			return
 		}
-		_ = store.Save(result)
-		metricsCollector.Update(result)
-		alertEngine.Evaluate(result)
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
+	})
+
+	mux.HandleFunc("/api/scan/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"scanning":     isScanning(),
+			"lastScanTime": getLastScanTime(),
+			"hasData":      getCachedResult() != nil,
+		})
+	})
+
+	mux.HandleFunc("/api/scan/trigger", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if isScanning() {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "already_scanning"})
+			return
+		}
+		targetNs := r.URL.Query().Get("namespace")
+		if targetNs == "" {
+			targetNs = namespace
+		}
+		go func() {
+			setScanning(true)
+			defer setScanning(false)
+			result, err := api.RunScan(kubeconfig, targetNs, nil)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "⚠  Triggered scan for %s failed: %v\n", targetNs, err)
+				return
+			}
+			setCachedResult(result)
+			setLastScanTime(time.Now())
+			_ = store.Save(result)
+			vault.Record(result)
+			metricsCollector.Update(result)
+			alertEngine.Evaluate(result)
+			fmt.Fprintf(os.Stderr, "🔄 Triggered scan (%s) — cluster score: %d, %d pods\n", targetNs, result.ClusterScore, result.TotalPods)
+		}()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "triggered", "namespace": targetNs})
 	})
 
 	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
@@ -142,13 +246,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 	})
 
 	mux.HandleFunc("/api/compliance", func(w http.ResponseWriter, r *http.Request) {
-		result, err := api.RunScan(kubeconfig, namespace, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode([]interface{}{})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result.Compliance)
 	})
 
@@ -158,14 +261,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	})
 
 	mux.HandleFunc("/api/generate/netpol", func(w http.ResponseWriter, r *http.Request) {
-		result, err := api.RunScan(kubeconfig, namespace, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode([]interface{}{})
 			return
 		}
 		policies := netpol.Generate(result.Scores, namespace)
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(policies)
 	})
 
@@ -187,14 +289,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	})
 
 	mux.HandleFunc("/api/export/csv", func(w http.ResponseWriter, r *http.Request) {
-		ns := r.URL.Query().Get("namespace")
-		if ns == "" {
-			ns = namespace
-		}
-		result, err := api.RunScan(kubeconfig, ns, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		result := getCachedResult()
+		if result == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "no scan data yet"})
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv")
@@ -237,19 +335,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	})
 
 	mux.HandleFunc("/api/rbac", func(w http.ResponseWriter, r *http.Request) {
-		ns := r.URL.Query().Get("namespace")
-		if ns == "" {
-			ns = namespace
-		}
-		result, err := api.RunScan(kubeconfig, ns, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"namespace": namespace, "findings": []interface{}{}, "totalPods": 0})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"namespace": ns,
+			"namespace": result.Namespace,
 			"findings":  result.RBACFindings,
 			"totalPods": result.TotalPods,
 		})
@@ -357,6 +450,48 @@ func runServe(cmd *cobra.Command, args []string) error {
 		json.NewEncoder(w).Encode(paths)
 	})
 
+	// Exploit chains API
+	mux.HandleFunc("/api/chains", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		paths := api.LatestAttackPaths()
+		if paths == nil || paths.ChainSummary == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "pending",
+				"message": "No exploit chain analysis yet — waiting for first scan",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"summary": paths.ChainSummary,
+			"chains":  paths.ExploitChains,
+		})
+	})
+
+	// Observed flows API (Hubble data)
+	mux.HandleFunc("/api/flows", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "pending",
+				"message": "No scan data yet",
+			})
+			return
+		}
+
+		var allFlows []types.ObservedFlow
+		for _, score := range result.Scores {
+			allFlows = append(allFlows, score.Blast.ObservedFlows...)
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"hubbleAvailable": result.HubbleAvailable,
+			"flowSource":      result.FlowSource,
+			"totalFlows":      len(allFlows),
+			"flows":           allFlows,
+		})
+	})
+
 	// Sprint 9: Multi-source ingestion API
 	mux.HandleFunc("/api/ingest", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -407,10 +542,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return
 		}
 
-		result, err := api.RunScan(kubeconfig, namespace, nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		result := getCachedResult()
+		if result == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "no scan data yet"})
 			return
 		}
 
@@ -465,7 +600,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"name":      "plexar",
 				"version":   Version,
-				"docs":      "https://plexar-security.io/docs",
+				"docs":      "https://plexar.io/docs",
 				"endpoints": []string{"/api/scan", "/api/history", "/api/compliance", "/api/alerts", "/api/generate/netpol", "/healthz", "/metrics"},
 			})
 		})
@@ -485,15 +620,32 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Background scan loop
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Helper: run scan, update cache, persist
+	doScan := func(label string) {
+		setScanning(true)
+		defer setScanning(false)
+
+		result, err := api.RunScan(kubeconfig, namespace, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "⚠  %s scan failed: %v\n", label, err)
+			return
+		}
+		setCachedResult(result)
+		setLastScanTime(time.Now())
+		_ = store.Save(result)
+		vault.Record(result)
+		metricsCollector.Update(result)
+		alertEngine.Evaluate(result)
+		fmt.Fprintf(os.Stderr, "🔄 %s — cluster score: %d, %d pods | evidence: %d records\n", label, result.ClusterScore, result.TotalPods, vault.Count())
+	}
+
 	go func() {
 		// Initial scan on startup
-		if result, err := api.RunScan(kubeconfig, namespace, nil); err == nil {
-			_ = store.SeedDemo(result)
-			_ = store.Save(result)
-			vault.Record(result)
-			metricsCollector.Update(result)
-			alertEngine.Evaluate(result)
-			fmt.Fprintf(os.Stderr, "🔄 Initial scan — cluster score: %d, %d pods\n", result.ClusterScore, result.TotalPods)
+		doScan("Initial scan")
+		// Seed demo history from first result
+		if r := getCachedResult(); r != nil {
+			_ = store.SeedDemo(r)
 		}
 
 		ticker := time.NewTicker(scanInterval)
@@ -501,16 +653,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		for {
 			select {
 			case <-ticker.C:
-				result, err := api.RunScan(kubeconfig, namespace, nil)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "⚠  Background scan failed: %v\n", err)
-					continue
-				}
-				_ = store.Save(result)
-				vault.Record(result)
-				metricsCollector.Update(result)
-				alertEngine.Evaluate(result)
-				fmt.Fprintf(os.Stderr, "🔄 Scan complete — cluster score: %d, %d pods | evidence: %d records\n", result.ClusterScore, result.TotalPods, vault.Count())
+				doScan("Background scan")
 
 				// Push evidence to compliance platforms
 				if intMgr.HasProviders() {
@@ -524,9 +667,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 						} else {
 							fmt.Fprintf(os.Stderr, "📤 Evidence pushed to compliance platforms\n")
 						}
-						if errs := intMgr.PushControls(latest.Controls, result.ClusterName); len(errs) > 0 {
-							for _, e := range errs {
-								fmt.Fprintf(os.Stderr, "⚠  Controls push failed: %v\n", e)
+						if r := getCachedResult(); r != nil {
+							if errs := intMgr.PushControls(latest.Controls, r.ClusterName); len(errs) > 0 {
+								for _, e := range errs {
+									fmt.Fprintf(os.Stderr, "⚠  Controls push failed: %v\n", e)
+								}
 							}
 						}
 					}

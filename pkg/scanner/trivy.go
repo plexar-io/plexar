@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
-	"github.com/plexar-security/plexar/pkg/k8s"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/k8s"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

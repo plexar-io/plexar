@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plexar-security/plexar/pkg/api"
-	"github.com/plexar-security/plexar/pkg/evidence"
-	"github.com/plexar-security/plexar/pkg/integrations"
-	"github.com/plexar-security/plexar/pkg/preflight"
-	"github.com/plexar-security/plexar/pkg/report"
-	"github.com/plexar-security/plexar/pkg/reporter"
-	"github.com/plexar-security/plexar/pkg/scanner"
+	"github.com/plexar-io/plexar/pkg/api"
+	"github.com/plexar-io/plexar/pkg/evidence"
+	"github.com/plexar-io/plexar/pkg/integrations"
+	"github.com/plexar-io/plexar/pkg/preflight"
+	"github.com/plexar-io/plexar/pkg/report"
+	"github.com/plexar-io/plexar/pkg/reporter"
+	"github.com/plexar-io/plexar/pkg/scanner"
 	"github.com/spf13/cobra"
 )
 

@@ -3,7 +3,7 @@ package classifier
 import (
 	"testing"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 func TestClassify(t *testing.T) {

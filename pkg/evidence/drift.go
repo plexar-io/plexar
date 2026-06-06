@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // DetectDrift compares two consecutive evidence records and returns drift events.

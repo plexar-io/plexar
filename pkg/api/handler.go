@@ -4,22 +4,24 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
-	"github.com/plexar-security/plexar/pkg/attackpath"
-	"github.com/plexar-security/plexar/pkg/classifier"
-	"github.com/plexar-security/plexar/pkg/compliance"
-	"github.com/plexar-security/plexar/pkg/k8s"
-	"github.com/plexar-security/plexar/pkg/network"
-	"github.com/plexar-security/plexar/pkg/permissions"
-	"github.com/plexar-security/plexar/pkg/rbac"
-	rt "github.com/plexar-security/plexar/pkg/runtime"
-	"github.com/plexar-security/plexar/pkg/scanner"
-	"github.com/plexar-security/plexar/pkg/scorer"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/attackpath"
+	"github.com/plexar-io/plexar/pkg/classifier"
+	"github.com/plexar-io/plexar/pkg/compliance"
+	"github.com/plexar-io/plexar/pkg/hubble"
+	"github.com/plexar-io/plexar/pkg/k8s"
+	"github.com/plexar-io/plexar/pkg/network"
+	"github.com/plexar-io/plexar/pkg/permissions"
+	"github.com/plexar-io/plexar/pkg/rbac"
+	rt "github.com/plexar-io/plexar/pkg/runtime"
+	"github.com/plexar-io/plexar/pkg/scanner"
+	"github.com/plexar-io/plexar/pkg/scorer"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,6 +29,10 @@ import (
 // Set this before calling RunScan to use a different scanner backend.
 // Defaults to nil, which auto-selects trivy.
 var ActiveVulnSource scanner.VulnSource
+
+// HubbleRelayAddr is the optional explicit address for Hubble Relay.
+// If empty, auto-detection via Kubernetes service lookup is used.
+var HubbleRelayAddr string
 
 // latestInsights holds the most recent runtime insights from a scan.
 var (
@@ -192,11 +198,44 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 
 	fmt.Fprintf(progress, "🌐 Mapping network blast radius...\n")
 	netAnalyzer := network.New(client)
-	blasts, netPolCount, err := netAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
+
+	// Hubble dual-mode: prefer observed flows, fall back to inferred reachability
+	hubbleAvailable := false
+	flowSource := "inferred"
+	var observedFlows []types.ObservedFlow
+
+	var hubbleOpts []hubble.ClientOption
+	if HubbleRelayAddr != "" {
+		hubbleOpts = append(hubbleOpts, hubble.WithRelayAddress(HubbleRelayAddr))
+	}
+	hubbleClient := hubble.NewClient(client.Clientset, hubbleOpts...)
+	if hubbleClient.Available(analysisCtx) {
+		hubbleAvailable = true
+		fmt.Fprintf(progress, "   ✅ Hubble Relay detected — using observed network flows\n")
+		flows, flowErr := hubbleClient.CollectFlows(analysisCtx, namespace, 1*time.Hour)
+		if flowErr != nil {
+			log.Printf("[hubble] flow collection failed, falling back to inferred: %v", flowErr)
+			fmt.Fprintf(progress, "   ⚠  Hubble flow collection failed: %v — falling back to inferred\n", flowErr)
+		} else {
+			observedFlows = flows
+			flowSource = "hubble"
+			fmt.Fprintf(progress, "   Collected %d observed flows\n", len(flows))
+		}
+	} else {
+		fmt.Fprintf(progress, "   ℹ  Hubble not detected — using inferred reachability (install Cilium + Hubble for observed flows)\n")
+	}
+
+	var blasts []types.BlastRadius
+	var netPolCount int
+	if flowSource == "hubble" && len(observedFlows) > 0 {
+		blasts, netPolCount, err = netAnalyzer.AnalyzeNamespaceWithFlows(analysisCtx, namespace, observedFlows)
+	} else {
+		blasts, netPolCount, err = netAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("network analysis failed: %w", err)
 	}
-	fmt.Fprintf(progress, "   Found %d pods, %d NetworkPolicies\n", len(blasts), netPolCount)
+	fmt.Fprintf(progress, "   Found %d pods, %d NetworkPolicies (source: %s)\n", len(blasts), netPolCount, flowSource)
 
 	fmt.Fprintf(progress, "🔓 Checking permissions and security context...\n")
 	permAnalyzer := permissions.New(client)
@@ -251,12 +290,32 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		return types.PodPermissions{}
 	}
 
+	// Build pod labels map for topology grouping
+	podLabelsMap := make(map[string]map[string]string)
+	podList, podListErr := client.Clientset.CoreV1().Pods(namespace).List(analysisCtx, metav1.ListOptions{})
+	if podListErr == nil {
+		for _, p := range podList.Items {
+			podLabelsMap[p.Name] = p.Labels
+		}
+	}
+
 	var scores []types.PlexarScore
 	for _, vuln := range vulns {
 		blast := findBlast(vuln.PodName)
 		perm := findPerm(vuln.PodName)
 		score := scorer.Score(vuln, blast, perm)
 		score.Namespace = namespace
+		// Attach pod labels — try exact match then prefix match
+		if labels, ok := podLabelsMap[vuln.PodName]; ok {
+			score.Labels = labels
+		} else {
+			for k, labels := range podLabelsMap {
+				if strings.HasPrefix(k, vuln.PodName) {
+					score.Labels = labels
+					break
+				}
+			}
+		}
 		scores = append(scores, score)
 	}
 
@@ -299,12 +358,20 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		insightsMu.Unlock()
 	}
 
-	// Attack path analysis
-	fmt.Fprintf(progress, "🗺  Computing attack paths...\n")
+	// Attack path analysis (includes exploit chain traversal)
+	fmt.Fprintf(progress, "🗺  Computing attack paths + exploit chains...\n")
 	graph := attackpath.Build(scores, rbacFindings)
 	apSummary := attackpath.Analyze(graph)
 	fmt.Fprintf(progress, "   %d attack paths found (%d critical, shortest: %d hops)\n",
 		apSummary.TotalPaths, apSummary.CriticalPaths, apSummary.ShortestHops)
+	if apSummary.ChainSummary != nil && apSummary.ChainSummary.TotalChains > 0 {
+		fmt.Fprintf(progress, "   ⛓  %d exploit chains (%d critical, %d agent-involved)\n",
+			apSummary.ChainSummary.TotalChains, apSummary.ChainSummary.CriticalChains, apSummary.ChainSummary.AgentChains)
+		if apSummary.ChainSummary.TopBreakFix.CVEID != "" {
+			fmt.Fprintf(progress, "   🔧 Top break-the-chain fix: patch %s on %s (eliminates %d chains)\n",
+				apSummary.ChainSummary.TopBreakFix.CVEID, apSummary.ChainSummary.TopBreakFix.PodName, apSummary.ChainSummary.TopBreakFix.ChainsEliminated)
+		}
+	}
 
 	insightsMu.Lock()
 	latestAttackPath = apSummary
@@ -341,6 +408,8 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		Warnings:        warnings,
 		Compliance:      complianceResults,
 		RBACFindings:    rbacFindings,
+		HubbleAvailable: hubbleAvailable,
+		FlowSource:      flowSource,
 	}
 
 	return result, nil

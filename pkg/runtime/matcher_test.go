@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 func TestMatchInUse_WithProfiles(t *testing.T) {

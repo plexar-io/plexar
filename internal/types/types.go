@@ -15,28 +15,31 @@ type ScanResult struct {
 	Warnings        []string           `json:"warnings,omitempty"`
 	Compliance      []ComplianceResult `json:"compliance,omitempty"`
 	RBACFindings    []RBACFinding      `json:"rbacFindings,omitempty"`
+	HubbleAvailable bool               `json:"hubbleAvailable,omitempty"`
+	FlowSource      string             `json:"flowSource,omitempty"` // "hubble" or "inferred"
 }
 
 // PlexarScore is the composite risk score for a single pod
 type PlexarScore struct {
-	PodName          string           `json:"podName"`
-	Namespace        string           `json:"namespace"`
-	ImageName        string           `json:"imageName"`
-	Total            int              `json:"total"`
-	Tier             string           `json:"tier"`
-	CVEScore         int              `json:"cveScore"`
-	BlastScore       int              `json:"blastScore"`
-	PermScore        int              `json:"permScore"`
-	PolicyGapScore   int              `json:"policyGapScore"`
-	SensitivityScore int              `json:"sensitivityScore"`
-	WorkloadClass    string           `json:"workloadClass,omitempty"`
-	RiskMultiplier   float64          `json:"riskMultiplier,omitempty"`
-	BaseScore        int              `json:"baseScore,omitempty"`
-	Vulns            VulnSummary      `json:"vulns"`
-	Blast            BlastRadius      `json:"blast"`
-	Permissions      PodPermissions   `json:"permissions"`
-	Recommendations  []Recommendation `json:"recommendations,omitempty"`
-	Roast            string           `json:"roast,omitempty"`
+	PodName          string            `json:"podName"`
+	Namespace        string            `json:"namespace"`
+	ImageName        string            `json:"imageName"`
+	Total            int               `json:"total"`
+	Tier             string            `json:"tier"`
+	CVEScore         int               `json:"cveScore"`
+	BlastScore       int               `json:"blastScore"`
+	PermScore        int               `json:"permScore"`
+	PolicyGapScore   int               `json:"policyGapScore"`
+	SensitivityScore int               `json:"sensitivityScore"`
+	WorkloadClass    string            `json:"workloadClass,omitempty"`
+	RiskMultiplier   float64           `json:"riskMultiplier,omitempty"`
+	BaseScore        int               `json:"baseScore,omitempty"`
+	Vulns            VulnSummary       `json:"vulns"`
+	Blast            BlastRadius       `json:"blast"`
+	Permissions      PodPermissions    `json:"permissions"`
+	Recommendations  []Recommendation  `json:"recommendations,omitempty"`
+	Roast            string            `json:"roast,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
 }
 
 // VulnSummary aggregates vulnerability data for a pod
@@ -61,19 +64,48 @@ type CVEInfo struct {
 	InstalledVersion string  `json:"installedVersion"`
 	FixedVersion     string  `json:"fixedVersion,omitempty"`
 	PublishedDate    string  `json:"publishedDate,omitempty"`
+	Description      string  `json:"description,omitempty"`
+	ExploitType      string  `json:"exploitType,omitempty"` // ssrf, rce, deserialization, sqli, path_traversal, auth_bypass, lfi, info_disclosure
 	InUse            bool    `json:"inUse"`
 	Confidence       float64 `json:"confidence,omitempty"` // 1.0=exact, 0.7=fuzzy, 0.5=conservative
 }
 
+// ObservedFlow represents a single observed network flow from Hubble
+type ObservedFlow struct {
+	SrcPod       string    `json:"srcPod"`
+	DstPod       string    `json:"dstPod"`
+	DstIP        string    `json:"dstIp,omitempty"`
+	Port         uint32    `json:"port"`
+	Protocol     string    `json:"protocol"`             // TCP, UDP
+	L7Protocol   string    `json:"l7Protocol,omitempty"` // HTTP, gRPC, DNS
+	L7Info       string    `json:"l7Info,omitempty"`     // HTTP method+path, gRPC service, DNS query
+	ByteCount    uint64    `json:"byteCount"`
+	RequestCount uint64    `json:"requestCount"`
+	LastSeen     time.Time `json:"lastSeen"`
+	Verdict      string    `json:"verdict"` // FORWARDED, DROPPED
+}
+
+// FlowSummary aggregates observed flows between a pod pair
+type FlowSummary struct {
+	SrcPod      string    `json:"srcPod"`
+	DstPod      string    `json:"dstPod"`
+	TotalBytes  uint64    `json:"totalBytes"`
+	TotalReqs   uint64    `json:"totalReqs"`
+	Ports       []uint32  `json:"ports"`
+	L7Protocols []string  `json:"l7Protocols,omitempty"`
+	LastSeen    time.Time `json:"lastSeen"`
+}
+
 // BlastRadius describes what a pod can reach if compromised
 type BlastRadius struct {
-	PodName            string   `json:"podName"`
-	ReachableTargets   []string `json:"reachableTargets"`
-	ConfiguredTargets  []string `json:"configuredTargets"`
-	HasNetworkPolicy   bool     `json:"hasNetworkPolicy"`
-	UnrestrictedEgress bool     `json:"unrestrictedEgress"`
-	InternetAccess     bool     `json:"internetAccess"`
-	DataStoreAccess    []string `json:"dataStoreAccess,omitempty"`
+	PodName            string         `json:"podName"`
+	ReachableTargets   []string       `json:"reachableTargets"`
+	ConfiguredTargets  []string       `json:"configuredTargets"`
+	HasNetworkPolicy   bool           `json:"hasNetworkPolicy"`
+	UnrestrictedEgress bool           `json:"unrestrictedEgress"`
+	InternetAccess     bool           `json:"internetAccess"`
+	DataStoreAccess    []string       `json:"dataStoreAccess,omitempty"`
+	ObservedFlows      []ObservedFlow `json:"observedFlows,omitempty"`
 }
 
 // PodPermissions captures security context and RBAC signals
@@ -296,6 +328,8 @@ type AttackPathNode struct {
 	Label    string            `json:"label"`
 	Risk     int               `json:"risk"`
 	Metadata map[string]string `json:"metadata,omitempty"`
+	CVEs     []CVEInfo         `json:"cves,omitempty"`
+	IsAgent  bool              `json:"isAgent,omitempty"`
 }
 
 // AttackPathEdge is an edge in the attack graph
@@ -310,11 +344,56 @@ type AttackPathEdge struct {
 
 // AttackPathSummary is the top-level attack path analysis result
 type AttackPathSummary struct {
-	TotalPaths     int          `json:"totalPaths"`
-	CriticalPaths  int          `json:"criticalPaths"`
-	ShortestHops   int          `json:"shortestHops"`
-	MostExposedPod string       `json:"mostExposedPod"`
-	Paths          []AttackPath `json:"paths"`
+	TotalPaths     int                  `json:"totalPaths"`
+	CriticalPaths  int                  `json:"criticalPaths"`
+	ShortestHops   int                  `json:"shortestHops"`
+	MostExposedPod string               `json:"mostExposedPod"`
+	Paths          []AttackPath         `json:"paths"`
+	ExploitChains  []ExploitChain       `json:"exploitChains,omitempty"`
+	ChainSummary   *ExploitChainSummary `json:"chainSummary,omitempty"`
+}
+
+// ExploitChain represents a CVE-type-aware exploit chain through the cluster
+type ExploitChain struct {
+	ID            string        `json:"id"`
+	ChainScore    float64       `json:"chainScore"`
+	CompositeRisk float64       `json:"compositeRisk"`
+	Severity      string        `json:"severity"`
+	Description   string        `json:"description"`
+	Hops          []ChainHop    `json:"hops"`
+	BreakFix      BreakChainFix `json:"breakFix"`
+	DataTarget    string        `json:"dataTarget,omitempty"`
+	EntryPoint    string        `json:"entryPoint"`
+	FinalTarget   string        `json:"finalTarget"`
+	HopCount      int           `json:"hopCount"`
+	HasAgentNode  bool          `json:"hasAgentNode,omitempty"`
+	AgentNodes    []string      `json:"agentNodes,omitempty"`
+}
+
+// ChainHop represents a single hop in an exploit chain
+type ChainHop struct {
+	PodName          string  `json:"podName"`
+	NodeID           string  `json:"nodeId"`
+	CVE              CVEInfo `json:"cve"`
+	ExploitType      string  `json:"exploitType"`
+	TransitionReason string  `json:"transitionReason"`
+}
+
+// BreakChainFix identifies the single fix that eliminates the most chains
+type BreakChainFix struct {
+	CVEID            string `json:"cveId"`
+	PodName          string `json:"podName"`
+	ChainsEliminated int    `json:"chainsEliminated"`
+	Recommendation   string `json:"recommendation"`
+}
+
+// ExploitChainSummary aggregates exploit chain analysis results
+type ExploitChainSummary struct {
+	TotalChains        int           `json:"totalChains"`
+	CriticalChains     int           `json:"criticalChains"`
+	AgentChains        int           `json:"agentChains"`
+	TopBreakFix        BreakChainFix `json:"topBreakFix"`
+	UniqueExploitTypes []string      `json:"uniqueExploitTypes"`
 }
 
 // LicenseInfo describes the enterprise license
