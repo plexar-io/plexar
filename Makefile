@@ -1,10 +1,10 @@
-.PHONY: build run clean test fmt vet scan serve
+.PHONY: build run clean test fmt vet scan serve helm-lint helm-template helm-package release-snapshot
 
 BINARY := plexar
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-GOFLAGS := -ldflags="-s -w -X github.com/plexar-security/plexar/cmd.Version=$(VERSION) -X github.com/plexar-security/plexar/cmd.Commit=$(COMMIT) -X github.com/plexar-security/plexar/cmd.Date=$(DATE)"
+GOFLAGS := -ldflags="-s -w -X github.com/plexar-io/plexar/cmd.Version=$(VERSION) -X github.com/plexar-io/plexar/cmd.Commit=$(COMMIT) -X github.com/plexar-io/plexar/cmd.Date=$(DATE)"
 
 build:
 	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/$(BINARY) .
@@ -37,9 +37,30 @@ deps:
 	go mod tidy
 
 docker-build:
-	docker build -t ghcr.io/plexar-security/plexar:$(VERSION) .
-	docker tag ghcr.io/plexar-security/plexar:$(VERSION) ghcr.io/plexar-security/plexar:latest
+	docker build -t ghcr.io/plexar-io/plexar:$(VERSION) .
+	docker tag ghcr.io/plexar-io/plexar:$(VERSION) ghcr.io/plexar-io/plexar:latest
 
 docker-push: docker-build
-	docker push ghcr.io/plexar-security/plexar:$(VERSION)
-	docker push ghcr.io/plexar-security/plexar:latest
+	docker push ghcr.io/plexar-io/plexar:$(VERSION)
+	docker push ghcr.io/plexar-io/plexar:latest
+
+## --- Helm ---
+
+CHART_DIR := charts/plexar
+
+helm-lint:
+	helm lint $(CHART_DIR)
+
+helm-template:
+	helm template plexar $(CHART_DIR) --debug
+
+helm-package:
+	helm package $(CHART_DIR) --destination bin/
+
+## --- GoReleaser ---
+
+release-snapshot:
+	goreleaser release --snapshot --clean
+
+release:
+	goreleaser release --clean

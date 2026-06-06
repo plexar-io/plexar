@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Vault stores immutable, hash-chained compliance evidence records

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/plexar-security/plexar/pkg/evidence"
-	"github.com/plexar-security/plexar/pkg/ingest"
+	"github.com/plexar-io/plexar/pkg/evidence"
+	"github.com/plexar-io/plexar/pkg/ingest"
 	"github.com/spf13/cobra"
 )
 

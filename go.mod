@@ -1,4 +1,4 @@
-module github.com/plexar-security/plexar
+module github.com/plexar-io/plexar
 
 go 1.25.0
 

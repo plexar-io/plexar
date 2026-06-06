@@ -3,7 +3,7 @@ package attackpath
 import (
 	"testing"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 func TestBuild_BasicGraph(t *testing.T) {

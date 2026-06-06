@@ -1,0 +1,35 @@
+# Binaries
+plexar
+reflex
+*.exe
+
+# Generated reports
+*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+vendor/
+*.test
+coverage.out
+coverage.html
+
+# Helm
+charts/*/charts/
+charts/*/*.tgz
+
+# Docker
+.docker/
+
+# Env
+.env
+.env.*

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/plexar-security/plexar/pkg/scorer"
+	"github.com/plexar-io/plexar/pkg/scorer"
 	"github.com/spf13/cobra"
 )
 

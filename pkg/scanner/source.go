@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/plexar-security/plexar/internal/types"
-	"github.com/plexar-security/plexar/pkg/k8s"
+	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/k8s"
 )
 
 // VulnSource is the interface for pluggable vulnerability data backends.

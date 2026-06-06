@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Store persists scan snapshots for historical trending

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // ExportJSON writes the full scan result as pretty-printed JSON

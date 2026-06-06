@@ -79,7 +79,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: plexar
-          image: ghcr.io/plexar-security/plexar:latest
+          image: ghcr.io/plexar-io/plexar:latest
           args:
             - serve
             - --namespace=default

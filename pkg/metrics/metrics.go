@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Collector maintains Prometheus metrics from scan results

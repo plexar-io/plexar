@@ -3,7 +3,7 @@ package compliance
 import (
 	"fmt"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // mapEUCRA maps scan results to EU Cyber Resilience Act (CRA) essential requirements

@@ -6,26 +6,68 @@ metadata:
   labels:
     app.kubernetes.io/part-of: reflex-demo
 ---
-# ── Services ──
+# ═══════════════════════════════════════
+# SERVICE ACCOUNTS
+# ═══════════════════════════════════════
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: api-gateway-sa
   namespace: acme-prod
+  labels: { team: platform }
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: payment-sa
   namespace: acme-prod
+  labels: { team: payments }
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: analytics-sa
   namespace: acme-prod
+  labels: { team: data }
 ---
-# ── Deployments ──
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ml-sa
+  namespace: acme-prod
+  labels: { team: ml }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-platform-sa
+  namespace: acme-prod
+  labels: { team: data-platform }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-sa
+  namespace: acme-prod
+  labels: { team: sre }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-sa
+  namespace: acme-prod
+  labels: { team: frontend }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-sa
+  namespace: acme-prod
+  labels: { team: security }
+---
+# ═══════════════════════════════════════
+# TEAM: PLATFORM  (api-gateway, logging-agent)
+# ═══════════════════════════════════════
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,6 +75,7 @@ metadata:
   namespace: acme-prod
   labels:
     app: api-gateway
+    team: platform
 spec:
   replicas: 1
   selector:
@@ -42,6 +85,7 @@ spec:
     metadata:
       labels:
         app: api-gateway
+        team: platform
     spec:
       serviceAccountName: api-gateway-sa
       containers:
@@ -49,9 +93,37 @@ spec:
           image: nginx:1.21.6
           ports:
             - containerPort: 80
-          securityContext:
-            runAsRoot: false
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logging-agent
+  namespace: acme-prod
+  labels:
+    app: logging-agent
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logging-agent
+  template:
+    metadata:
+      labels:
+        app: logging-agent
+        team: platform
+    spec:
+      containers:
+        - name: logging-agent
+          image: fluent/fluentd:v1.14
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+---
+# ═══════════════════════════════════════
+# TEAM: PAYMENTS  (payment-service, cart-service, order-processor)
+# ═══════════════════════════════════════
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -59,6 +131,7 @@ metadata:
   namespace: acme-prod
   labels:
     app: payment-service
+    team: payments
 spec:
   replicas: 1
   selector:
@@ -68,6 +141,7 @@ spec:
     metadata:
       labels:
         app: payment-service
+        team: payments
     spec:
       serviceAccountName: payment-sa
       containers:
@@ -83,10 +157,63 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: cart-service
+  namespace: acme-prod
+  labels:
+    app: cart-service
+    team: payments
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart-service
+  template:
+    metadata:
+      labels:
+        app: cart-service
+        team: payments
+    spec:
+      containers:
+        - name: cart-service
+          image: redis:6.2.7
+          ports:
+            - containerPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-processor
+  namespace: acme-prod
+  labels:
+    app: order-processor
+    team: payments
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-processor
+  template:
+    metadata:
+      labels:
+        app: order-processor
+        team: payments
+    spec:
+      containers:
+        - name: order-processor
+          image: golang:1.19.5
+          command: ["sleep", "infinity"]
+---
+# ═══════════════════════════════════════
+# TEAM: IDENTITY  (user-auth)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: user-auth
   namespace: acme-prod
   labels:
     app: user-auth
+    team: identity
 spec:
   replicas: 1
   selector:
@@ -96,6 +223,7 @@ spec:
     metadata:
       labels:
         app: user-auth
+        team: identity
     spec:
       containers:
         - name: user-auth
@@ -109,6 +237,9 @@ spec:
             - name: JWT_SECRET
               value: "super-secret-jwt-key"
 ---
+# ═══════════════════════════════════════
+# TEAM: DATA  (analytics-engine, search-service)
+# ═══════════════════════════════════════
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -116,6 +247,7 @@ metadata:
   namespace: acme-prod
   labels:
     app: analytics-engine
+    team: data
 spec:
   replicas: 1
   selector:
@@ -125,6 +257,7 @@ spec:
     metadata:
       labels:
         app: analytics-engine
+        team: data
     spec:
       serviceAccountName: analytics-sa
       containers:
@@ -141,6 +274,7 @@ metadata:
   namespace: acme-prod
   labels:
     app: search-service
+    team: data
 spec:
   replicas: 1
   selector:
@@ -150,6 +284,7 @@ spec:
     metadata:
       labels:
         app: search-service
+        team: data
     spec:
       containers:
         - name: search-service
@@ -159,75 +294,9 @@ spec:
           securityContext:
             allowPrivilegeEscalation: true
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: notification-service
-  namespace: acme-prod
-  labels:
-    app: notification-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: notification-service
-  template:
-    metadata:
-      labels:
-        app: notification-service
-    spec:
-      containers:
-        - name: notification-service
-          image: node:18.12.0
-          command: ["node", "-e", "require('http').createServer((req,res)=>{res.end('ok')}).listen(4000)"]
-          ports:
-            - containerPort: 4000
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cart-service
-  namespace: acme-prod
-  labels:
-    app: cart-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: cart-service
-  template:
-    metadata:
-      labels:
-        app: cart-service
-    spec:
-      containers:
-        - name: cart-service
-          image: redis:6.2.7
-          ports:
-            - containerPort: 6379
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: order-processor
-  namespace: acme-prod
-  labels:
-    app: order-processor
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: order-processor
-  template:
-    metadata:
-      labels:
-        app: order-processor
-    spec:
-      containers:
-        - name: order-processor
-          image: golang:1.19.5
-          command: ["sleep", "infinity"]
----
+# ═══════════════════════════════════════
+# TEAM: FULFILLMENT  (inventory-service, notification-service)
+# ═══════════════════════════════════════
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -235,6 +304,7 @@ metadata:
   namespace: acme-prod
   labels:
     app: inventory-service
+    team: fulfillment
 spec:
   replicas: 1
   selector:
@@ -244,6 +314,7 @@ spec:
     metadata:
       labels:
         app: inventory-service
+        team: fulfillment
     spec:
       containers:
         - name: inventory-service
@@ -257,34 +328,422 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: logging-agent
+  name: notification-service
   namespace: acme-prod
   labels:
-    app: logging-agent
+    app: notification-service
+    team: fulfillment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: logging-agent
+      app: notification-service
   template:
     metadata:
       labels:
-        app: logging-agent
+        app: notification-service
+        team: fulfillment
     spec:
       containers:
-        - name: logging-agent
-          image: fluent/fluentd:v1.14
+        - name: notification-service
+          image: node:18.12.0
+          command: ["node", "-e", "require('http').createServer((req,res)=>{res.end('ok')}).listen(4000)"]
+          ports:
+            - containerPort: 4000
+---
+# ═══════════════════════════════════════
+# TEAM: ML  (model-serving, feature-store, ml-pipeline)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  namespace: acme-prod
+  labels:
+    app: model-serving
+    team: ml
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: model-serving
+  template:
+    metadata:
+      labels:
+        app: model-serving
+        team: ml
+    spec:
+      serviceAccountName: ml-sa
+      containers:
+        - name: model-serving
+          image: tensorflow/serving:2.14.0
+          ports:
+            - containerPort: 8501
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-store
+  namespace: acme-prod
+  labels:
+    app: feature-store
+    team: ml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: feature-store
+  template:
+    metadata:
+      labels:
+        app: feature-store
+        team: ml
+    spec:
+      serviceAccountName: ml-sa
+      containers:
+        - name: feature-store
+          image: redis:7.2.3
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "--maxmemory", "256mb"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-pipeline
+  namespace: acme-prod
+  labels:
+    app: ml-pipeline
+    team: ml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-pipeline
+  template:
+    metadata:
+      labels:
+        app: ml-pipeline
+        team: ml
+    spec:
+      serviceAccountName: ml-sa
+      containers:
+        - name: ml-pipeline
+          image: python:3.11.7
+          command: ["python3", "-m", "http.server", "8080"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MODEL_REGISTRY_URL
+              value: "http://model-serving:8501"
+            - name: FEATURE_STORE_URL
+              value: "redis://feature-store:6379"
+            - name: AWS_ACCESS_KEY_ID
+              value: "AKIAIOSFODNN7EXAMPLE"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+          securityContext:
+            privileged: true
+            runAsUser: 0
+---
+# ═══════════════════════════════════════
+# TEAM: DATA-PLATFORM  (postgres-primary, kafka-broker, etl-worker)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-primary
+  namespace: acme-prod
+  labels:
+    app: postgres-primary
+    team: data-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-primary
+  template:
+    metadata:
+      labels:
+        app: postgres-primary
+        team: data-platform
+    spec:
+      serviceAccountName: data-platform-sa
+      containers:
+        - name: postgres
+          image: postgres:15.4
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: "demo-pg-password-2024"
+            - name: POSTGRES_DB
+              value: "acme_production"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-broker
+  namespace: acme-prod
+  labels:
+    app: kafka-broker
+    team: data-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-broker
+  template:
+    metadata:
+      labels:
+        app: kafka-broker
+        team: data-platform
+    spec:
+      serviceAccountName: data-platform-sa
+      containers:
+        - name: kafka
+          image: bitnami/kafka:3.6
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_CFG_NODE_ID
+              value: "0"
+            - name: KAFKA_CFG_PROCESS_ROLES
+              value: "controller,broker"
+          securityContext:
+            runAsUser: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etl-worker
+  namespace: acme-prod
+  labels:
+    app: etl-worker
+    team: data-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: etl-worker
+  template:
+    metadata:
+      labels:
+        app: etl-worker
+        team: data-platform
+    spec:
+      serviceAccountName: data-platform-sa
+      containers:
+        - name: etl-worker
+          image: python:3.10.13
+          command: ["sleep", "infinity"]
+          env:
+            - name: PG_CONN
+              value: "postgresql://postgres:demo-pg-password-2024@postgres-primary:5432/acme_production"
+            - name: KAFKA_BROKERS
+              value: "kafka-broker:9092"
+---
+# ═══════════════════════════════════════
+# TEAM: SRE  (prometheus, grafana)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: acme-prod
+  labels:
+    app: prometheus
+    team: sre
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        team: sre
+    spec:
+      serviceAccountName: sre-sa
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.48.1
+          ports:
+            - containerPort: 9090
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: acme-prod
+  labels:
+    app: grafana
+    team: sre
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        team: sre
+    spec:
+      serviceAccountName: sre-sa
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.3
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin-demo-grafana"
+---
+# ═══════════════════════════════════════
+# TEAM: FRONTEND  (web-app, cdn-cache)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: acme-prod
+  labels:
+    app: web-app
+    team: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+        team: frontend
+    spec:
+      serviceAccountName: frontend-sa
+      containers:
+        - name: web-app
+          image: node:20.10.0
+          command: ["node", "-e", "require('http').createServer((req,res)=>{res.end('ok')}).listen(3000)"]
+          ports:
+            - containerPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn-cache
+  namespace: acme-prod
+  labels:
+    app: cdn-cache
+    team: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdn-cache
+  template:
+    metadata:
+      labels:
+        app: cdn-cache
+        team: frontend
+    spec:
+      serviceAccountName: frontend-sa
+      containers:
+        - name: cdn-cache
+          image: varnish:7.4
+          ports:
+            - containerPort: 6081
+---
+# ═══════════════════════════════════════
+# TEAM: SECURITY  (vault, policy-agent)
+# ═══════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  namespace: acme-prod
+  labels:
+    app: vault
+    team: security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+        team: security
+    spec:
+      serviceAccountName: security-sa
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.15.4
+          ports:
+            - containerPort: 8200
+          command: ["vault", "server", "-dev"]
+          env:
+            - name: VAULT_DEV_ROOT_TOKEN_ID
+              value: "demo-root-token"
+          securityContext:
+            capabilities:
+              add: ["IPC_LOCK"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-agent
+  namespace: acme-prod
+  labels:
+    app: policy-agent
+    team: security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-agent
+  template:
+    metadata:
+      labels:
+        app: policy-agent
+        team: security
+    spec:
+      serviceAccountName: security-sa
+      containers:
+        - name: policy-agent
+          image: openpolicyagent/opa:0.60.0
+          ports:
+            - containerPort: 8181
+          args: ["run", "--server"]
           securityContext:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
 ---
-# ── Services ──
+# ═══════════════════════════════════════
+# SERVICES
+# ═══════════════════════════════════════
 apiVersion: v1
 kind: Service
 metadata:
   name: api-gateway
   namespace: acme-prod
+  labels: { team: platform }
 spec:
   selector:
     app: api-gateway
@@ -296,6 +755,7 @@ kind: Service
 metadata:
   name: payment-service
   namespace: acme-prod
+  labels: { team: payments }
 spec:
   selector:
     app: payment-service
@@ -307,6 +767,7 @@ kind: Service
 metadata:
   name: user-auth
   namespace: acme-prod
+  labels: { team: identity }
 spec:
   selector:
     app: user-auth
@@ -318,6 +779,7 @@ kind: Service
 metadata:
   name: analytics-engine
   namespace: acme-prod
+  labels: { team: data }
 spec:
   selector:
     app: analytics-engine
@@ -329,6 +791,7 @@ kind: Service
 metadata:
   name: search-service
   namespace: acme-prod
+  labels: { team: data }
 spec:
   selector:
     app: search-service
@@ -340,6 +803,7 @@ kind: Service
 metadata:
   name: notification-service
   namespace: acme-prod
+  labels: { team: fulfillment }
 spec:
   selector:
     app: notification-service
@@ -351,6 +815,7 @@ kind: Service
 metadata:
   name: cart-service
   namespace: acme-prod
+  labels: { team: payments }
 spec:
   selector:
     app: cart-service
@@ -362,6 +827,7 @@ kind: Service
 metadata:
   name: order-processor
   namespace: acme-prod
+  labels: { team: payments }
 spec:
   selector:
     app: order-processor
@@ -373,6 +839,7 @@ kind: Service
 metadata:
   name: inventory-service
   namespace: acme-prod
+  labels: { team: fulfillment }
 spec:
   selector:
     app: inventory-service
@@ -384,13 +851,160 @@ kind: Service
 metadata:
   name: logging-agent
   namespace: acme-prod
+  labels: { team: platform }
 spec:
   selector:
     app: logging-agent
   ports:
     - port: 24224
 ---
-# ── NetworkPolicies (only 3, leaving most pods unprotected) ──
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving
+  namespace: acme-prod
+  labels: { team: ml }
+spec:
+  selector:
+    app: model-serving
+  ports:
+    - port: 8501
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feature-store
+  namespace: acme-prod
+  labels: { team: ml }
+spec:
+  selector:
+    app: feature-store
+  ports:
+    - port: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-pipeline
+  namespace: acme-prod
+  labels: { team: ml }
+spec:
+  selector:
+    app: ml-pipeline
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary
+  namespace: acme-prod
+  labels: { team: data-platform }
+spec:
+  selector:
+    app: postgres-primary
+  ports:
+    - port: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-broker
+  namespace: acme-prod
+  labels: { team: data-platform }
+spec:
+  selector:
+    app: kafka-broker
+  ports:
+    - port: 9092
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: etl-worker
+  namespace: acme-prod
+  labels: { team: data-platform }
+spec:
+  selector:
+    app: etl-worker
+  ports:
+    - port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: acme-prod
+  labels: { team: sre }
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: acme-prod
+  labels: { team: sre }
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app
+  namespace: acme-prod
+  labels: { team: frontend }
+spec:
+  selector:
+    app: web-app
+  ports:
+    - port: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-cache
+  namespace: acme-prod
+  labels: { team: frontend }
+spec:
+  selector:
+    app: cdn-cache
+  ports:
+    - port: 6081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: acme-prod
+  labels: { team: security }
+spec:
+  selector:
+    app: vault
+  ports:
+    - port: 8200
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-agent
+  namespace: acme-prod
+  labels: { team: security }
+spec:
+  selector:
+    app: policy-agent
+  ports:
+    - port: 8181
+---
+# ═══════════════════════════════════════
+# NETWORK POLICIES  (sparse — most pods unprotected)
+# ═══════════════════════════════════════
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -458,7 +1072,76 @@ spec:
             matchLabels:
               app: cart-service
 ---
-# ── RBAC: risky bindings for demo ──
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-restrict
+  namespace: acme-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-primary
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              team: data-platform
+      ports:
+        - port: 5432
+    - from:
+        - podSelector:
+            matchLabels:
+              app: analytics-engine
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vault-restrict
+  namespace: acme-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: vault
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              team: security
+      ports:
+        - port: 8200
+    - from:
+        - podSelector:
+            matchLabels:
+              app: payment-service
+      ports:
+        - port: 8200
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: policy-agent-restrict
+  namespace: acme-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: policy-agent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 8181
+---
+# ═══════════════════════════════════════
+# RBAC — risky bindings for demo
+# ═══════════════════════════════════════
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -494,4 +1177,69 @@ subjects:
 roleRef:
   kind: ClusterRole
   name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: acme-prod
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sre-pod-reader
+  namespace: acme-prod
+subjects:
+  - kind: ServiceAccount
+    name: sre-sa
+    namespace: acme-prod
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ml-secret-access
+  namespace: acme-prod
+subjects:
+  - kind: ServiceAccount
+    name: ml-sa
+    namespace: acme-prod
+roleRef:
+  kind: Role
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: security-sa
+    namespace: acme-prod
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: data-platform-secret-access
+  namespace: acme-prod
+subjects:
+  - kind: ServiceAccount
+    name: data-platform-sa
+    namespace: acme-prod
+roleRef:
+  kind: Role
+  name: secret-reader
   apiGroup: rbac.authorization.k8s.io

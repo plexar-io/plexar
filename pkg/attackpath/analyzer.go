@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Analyze computes attack paths from the graph.
@@ -72,12 +72,17 @@ func Analyze(g *Graph) *types.AttackPathSummary {
 		}
 	}
 
+	// Run exploit chain analysis (CVE-type-aware traversal)
+	exploitChains, chainSummary := FindExploitChains(g)
+
 	return &types.AttackPathSummary{
 		TotalPaths:     len(allPaths),
 		CriticalPaths:  criticalPaths,
 		ShortestHops:   shortestHops,
 		MostExposedPod: mostExposed,
 		Paths:          allPaths,
+		ExploitChains:  exploitChains,
+		ChainSummary:   chainSummary,
 	}
 }
 

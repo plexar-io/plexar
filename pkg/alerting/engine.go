@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Destination is where alerts get sent

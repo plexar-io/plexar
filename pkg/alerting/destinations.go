@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // SlackDestination sends alerts to a Slack webhook

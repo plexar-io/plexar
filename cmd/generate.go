@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/plexar-security/plexar/pkg/api"
-	"github.com/plexar-security/plexar/pkg/netpol"
+	"github.com/plexar-io/plexar/pkg/api"
+	"github.com/plexar-io/plexar/pkg/netpol"
 	"github.com/spf13/cobra"
 )
 

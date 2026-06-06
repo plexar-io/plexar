@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-pdf/fpdf"
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // AnnexIVSection represents a section of EU AI Act Annex IV technical documentation
@@ -36,7 +36,7 @@ type AnnexIVReport struct {
 
 // GenerateAnnexIVReport builds the EU AI Act Annex IV assessment from scan data
 func GenerateAnnexIVReport(result *types.ScanResult) *AnnexIVReport {
-	aipods := []types.PlexarScore{}
+	aiPods := []types.PlexarScore{}
 	for _, s := range result.Scores {
 		if s.WorkloadClass == "ML / AI Workload" {
 			aiPods = append(aiPods, s)

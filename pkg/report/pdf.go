@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-pdf/fpdf"
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // Colors

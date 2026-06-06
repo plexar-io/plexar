@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // S3Sink pushes evidence records to an S3-compatible object store (AWS S3, MinIO, etc.)

@@ -43,6 +43,9 @@ Same CVEs. Completely different risk. **Plexar tells you which one to fix first.
 | CVE scanning                    |  Yes  |    Yes    |    Yes    |  **Yes**   |
 | Runtime "in use" filtering      |   -   |     -     |    $$$    |  **Yes**   |
 | Attack path analysis            |   -   |     -     |    $$$    |  **Yes**   |
+| CVE exploit chain analysis      |   -   |     -     |     -     |  **Yes**   |
+| Observed network flows (Hubble) |   -   |     -     |    $$$    |  **Yes**   |
+| AI agent-aware risk scoring     |   -   |     -     |     -     |  **Yes**   |
 | Compliance evidence vault       |   -   |     -     |     -     |  **Yes**   |
 | SOC 2 / PCI DSS / HIPAA mapping |   -   |     -     |  Partial  |  **Yes**   |
 | EU CRA / EU AI Act reports      |   -   |     -     |     -     |  **Yes**   |
@@ -59,23 +62,27 @@ Same CVEs. Completely different risk. **Plexar tells you which one to fix first.
 
 ```bash
 # Homebrew
-brew install plexar-security/tap/plexar
+brew install plexar-io/tap/plexar
 
 # Go
-go install github.com/plexar-security/plexar@latest
+go install github.com/plexar-io/plexar@latest
 
 # Binary
-curl -sfL https://get.plexar-security.io | sh
+curl -sfL https://get.plexar.io | sh
+
+# Helm (Kubernetes)
+helm repo add plexar https://charts.plexar.io
+helm install plexar plexar/plexar --namespace plexar-system --create-namespace
 
 # From source
-git clone https://github.com/plexar-security/plexar.git
+git clone https://github.com/plexar-io/plexar.git
 cd plexar && go build -o reflex .
 ```
 
 ### Try the demo (5 minutes)
 
 ```bash
-git clone https://github.com/plexar-security/plexar.git && cd plexar
+git clone https://github.com/plexar-io/plexar.git && cd plexar
 ./demo/setup.sh          # creates a kind cluster with 10 vulnerable workloads
 ```
 
@@ -122,7 +129,8 @@ git clone https://github.com/plexar-security/plexar.git && cd plexar
 ◈ plexar serve -n production --scan-interval 5m \
     --alert-slack-url "$SLACK_WEBHOOK" \
     --vanta-token "$VANTA_TOKEN" \
-    --evidence-sink "s3://key:secret@minio:9000/evidence"
+    --evidence-sink "s3://key:secret@minio:9000/evidence" \
+    --hubble-relay hubble-relay.kube-system:4245
 
 # MCP server for AI assistants
 ◈ plexar mcp -n production
@@ -178,6 +186,37 @@ internet ──network_reach──▶ api-gateway ──rbac_escalate──▶ c
 - **Risk reduction estimates** — "Fixing weakest link drops severity from critical to medium"
 - **Severity scoring** — combined CVE × reachability × RBAC × runtime
 
+### CVE Exploit Chain Analysis
+
+DFS-based traversal finds multi-hop exploit chains where each hop requires a matching CVE exploit type:
+
+```
+web-frontend ──SSRF──▶ api-service ──RCE──▶ db-proxy ──SQLi──▶ database
+  CVE-2024-1234          CVE-2024-5678        CVE-2024-9012
+```
+
+- **CVE-type-aware chaining** — SSRF enables network hops, RCE enables exec, SQLi enables data access
+- **Agent-aware scoring** — AI workloads get 1.5× chain risk multiplier
+- **Break-the-chain fixes** — identifies which single CVE patch eliminates the most chains
+- **Severity classification** — chains scored by hop count, CVE severity, and agent involvement
+
+### Cilium Hubble Integration
+
+Dual-mode network analysis — **observed flows preferred**, K8s API inference as fallback:
+
+```bash
+# Auto-detect Hubble Relay (via K8s service discovery)
+◈ plexar serve -n production
+
+# Explicit Hubble Relay address
+◈ plexar serve -n production --hubble-relay hubble-relay.kube-system:4245
+```
+
+- **Auto-detection** — discovers `hubble-relay` service in `kube-system` automatically
+- **Ground-truth reachability** — observed traffic replaces inferred blast radius
+- **Graceful fallback** — if Hubble unavailable, falls back to K8s API inference
+- **Flow aggregation** — deduplicates and summarizes per pod-pair
+
 ### Multi-Source Ingestion
 
 Import findings from external scanners and normalize into Plexar's unified model:
@@ -207,17 +246,21 @@ Push compliance evidence to external storage automatically after each scan:
 
 ### AI Workload Classifier
 
-Automatic classification of **14 workload types** with risk multipliers:
+Automatic classification of **19 workload types** with risk multipliers:
 
 | Class            | Multiplier |     | Class          | Multiplier |
 | ---------------- | :--------: | --- | -------------- | :--------: |
-| Auth Service     |   ×1.50    |     | API Gateway    |   ×1.30    |
-| Payment Service  |   ×1.50    |     | Search Engine  |   ×1.30    |
-| Secret Manager   |   ×1.50    |     | Cache / Redis  |   ×1.25    |
-| Database         |   ×1.40    |     | Object Storage |   ×1.25    |
-| CI/CD Pipeline   |   ×1.40    |     | Message Queue  |   ×1.20    |
-| ML / AI Workload |   ×1.35    |     | General App    |   ×1.00    |
-| LLM Inference    |   ×1.60    |     | Monitoring     |   ×0.85    |
+| AI Agent Runtime |   ×1.55    |     | API Gateway    |   ×1.30    |
+| Auth Service     |   ×1.50    |     | Search Engine  |   ×1.30    |
+| Payment Service  |   ×1.50    |     | Cache / Redis  |   ×1.25    |
+| LLM Inference    |   ×1.50    |     | Object Storage |   ×1.25    |
+| Secret Manager   |   ×1.50    |     | Message Queue  |   ×1.20    |
+| AI Gateway       |   ×1.45    |     | General App    |   ×1.00    |
+| Database         |   ×1.40    |     | Monitoring     |   ×0.85    |
+| CI/CD Pipeline   |   ×1.40    |     |                |            |
+| RAG Pipeline     |   ×1.40    |     |                |            |
+| Model Registry   |   ×1.40    |     |                |            |
+| ML / AI Workload |   ×1.35    |     |                |            |
 
 ### Web Dashboard (11 pages)
 
@@ -361,6 +404,8 @@ All endpoints available when running `◈ plexar serve`:
 | `/api/rbac`                       |  GET   | RBAC audit findings                                           |
 | `/api/runtime`                    |  GET   | Runtime in-use insights, noise reduction, profiles            |
 | `/api/attackpath`                 |  GET   | Attack path analysis with remediation                         |
+| `/api/chains`                     |  GET   | CVE exploit chain analysis with break-the-chain fixes         |
+| `/api/flows`                      |  GET   | Observed network flows (Hubble) or flow source status         |
 | `/api/history`                    |  GET   | Historical scan snapshots                                     |
 | `/api/history/latest`             |  GET   | Most recent snapshot                                          |
 | `/api/history/delta`              |  GET   | Delta between last two snapshots                              |
@@ -430,8 +475,10 @@ reflex/
 │   │   ├── profiler.go           # /proc-based runtime profiler + Go/Rust detection
 │   │   └── matcher.go            # In-use matching with confidence scoring
 │   ├── attackpath/
-│   │   ├── graph.go              # Directed weighted attack graph
-│   │   └── analyzer.go           # Dijkstra + remediation + risk reduction
+│   │   ├── graph.go              # Directed weighted attack graph + CVE/agent enrichment
+│   │   ├── analyzer.go           # Dijkstra + remediation + risk reduction + chain analysis
+│   │   ├── chains.go             # DFS exploit chain traversal + agent-aware scoring
+│   │   └── cvetypes.go           # CVE exploit type classifier (SSRF, RCE, SQLi, etc.)
 │   ├── compliance/
 │   │   ├── mapper.go             # SOC 2, PCI DSS, HIPAA, CIS
 │   │   └── cra.go                # EU Cyber Resilience Act (Article 13)
@@ -442,10 +489,13 @@ reflex/
 │   │   ├── sink_s3.go            # S3/MinIO sink (SigV4)
 │   │   └── sink_webhook.go       # Webhook sink
 │   ├── rbac/auditor.go           # Per-pod RBAC analysis
-│   ├── network/network.go        # Reachability + blast radius
+│   ├── hubble/
+│   │   ├── client.go             # Hubble Relay client + auto-detection
+│   │   └── collector.go          # Flow aggregation + reachable target extraction
+│   ├── network/network.go        # Reachability + blast radius (dual-mode: Hubble/inferred)
 │   ├── scorer/                   # Risk scoring + configurable weights
 │   ├── permissions/              # Security context analysis
-│   ├── classifier/               # AI workload classifier (14 classes)
+│   ├── classifier/               # AI workload classifier (19 classes, agent-aware)
 │   ├── alerting/                 # Rule engine + Slack/PD/Jira
 │   ├── integrations/             # Vanta + Drata API clients
 │   ├── report/                   # SOC 2 PDF + EU AI Act PDF
@@ -461,8 +511,13 @@ reflex/
 ├── internal/types/types.go       # Shared data types
 ├── web/                          # Embedded 11-page dashboard
 ├── demo/                         # Kind cluster + vulnerable workloads
+├── charts/plexar/                # Helm chart
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   └── templates/               # K8s resource templates
 ├── deploy/                       # K8s manifests + Grafana dashboard
 ├── examples/                     # Sample weights, configs
+├── .goreleaser.yaml              # GoReleaser multi-platform release config
 ├── Dockerfile
 ├── Makefile
 ├── go.mod
@@ -485,7 +540,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ```bash
 # Development setup
-git clone https://github.com/plexar-security/plexar.git
+git clone https://github.com/plexar-io/plexar.git
 cd plexar
 go build ./...
 go test ./...
@@ -507,6 +562,6 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 **◈ Plexar** — See further. Secure what matters.
 
-[Website](https://plexar-security.io) · [Documentation](https://docs.plexar-security.io) · [GitHub](https://github.com/plexar-security/plexar) · [Discord](https://discord.gg/reflex)
+[Website](https://plexar.io) · [Documentation](https://docs.plexar.io) · [GitHub](https://github.com/plexar-io/plexar) · [Discord](https://discord.gg/reflex)
 
 </div>

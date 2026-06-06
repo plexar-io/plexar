@@ -81,6 +81,19 @@ kubectl get pods -n "${NAMESPACE}" -o wide --no-headers | while read -r line; do
 done
 
 echo ""
+echo "  Teams:"
+echo "    platform      — api-gateway, logging-agent"
+echo "    payments      — payment-service, cart-service, order-processor"
+echo "    identity      — user-auth"
+echo "    data          — analytics-engine, search-service"
+echo "    fulfillment   — inventory-service, notification-service"
+echo "    ml            — model-serving (x2), feature-store, ml-pipeline"
+echo "    data-platform — postgres-primary, kafka-broker, etl-worker"
+echo "    sre           — prometheus, grafana"
+echo "    frontend      — web-app (x2), cdn-cache"
+echo "    security      — vault, policy-agent"
+
+echo ""
 echo "  NetworkPolicies:"
 kubectl get networkpolicies -n "${NAMESPACE}" --no-headers 2>/dev/null | while read -r line; do
     echo "    ${line}"

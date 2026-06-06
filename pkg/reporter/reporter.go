@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // PrintReport outputs the CLI scan report

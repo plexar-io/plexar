@@ -3,7 +3,7 @@ package classifier
 import (
 	"strings"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 // WorkloadClass represents a classified workload type
@@ -92,6 +92,56 @@ var rules = []classificationRule{
 		imageHints: []string{"stripe", "braintree"},
 		nameHints:  []string{"payment", "billing", "invoice", "checkout", "transaction", "finance", "ledger"},
 		portHints:  []int{},
+	},
+	{
+		class: WorkloadClass{
+			Name: "ai-agent", Label: "AI Agent Runtime",
+			RiskMultiplier: 1.55,
+			Reason:         "AI agents have non-deterministic communication patterns; compromise enables tool abuse, data exfiltration via LLM, and unpredictable lateral movement",
+		},
+		imageHints: []string{"langchain", "crewai", "autogen", "kagent", "agentkit", "langgraph", "llamaindex", "semantic-kernel", "haystack", "agent-runtime"},
+		nameHints:  []string{"agent", "crew", "orchestrator", "planner", "agentic", "autogen", "langchain"},
+		portHints:  []int{},
+	},
+	{
+		class: WorkloadClass{
+			Name: "llm-inference", Label: "LLM Inference",
+			RiskMultiplier: 1.50,
+			Reason:         "LLM inference endpoints process untrusted prompts; compromise enables prompt injection, model theft, and data leakage",
+		},
+		imageHints: []string{"vllm", "tgi", "text-generation-inference", "llama-cpp", "llama.cpp", "ollama", "llm-d", "localai", "koboldai", "exllama", "lmdeploy"},
+		nameHints:  []string{"llm", "inference", "completion", "chat", "vllm", "tgi", "ollama", "llama"},
+		portHints:  []int{8000, 11434},
+	},
+	{
+		class: WorkloadClass{
+			Name: "ai-gateway", Label: "AI Gateway",
+			RiskMultiplier: 1.45,
+			Reason:         "AI gateways route all LLM traffic; compromise enables prompt interception, model impersonation, and credential theft for upstream APIs",
+		},
+		imageHints: []string{"higress", "litellm", "portkey", "helicone", "promptlayer", "openrouter", "braintrustdata"},
+		nameHints:  []string{"ai-gateway", "model-router", "llm-gateway", "prompt-proxy", "litellm", "higress"},
+		portHints:  []int{4000},
+	},
+	{
+		class: WorkloadClass{
+			Name: "rag-pipeline", Label: "RAG Pipeline",
+			RiskMultiplier: 1.40,
+			Reason:         "RAG pipelines have read access to knowledge bases; compromise enables knowledge poisoning and sensitive data extraction",
+		},
+		imageHints: []string{"chromadb", "chroma", "pinecone", "weaviate", "qdrant", "milvus", "pgvector", "faiss"},
+		nameHints:  []string{"rag", "embedding", "vector-db", "retriev", "knowledge-base", "chromadb", "qdrant", "weaviate", "milvus"},
+		portHints:  []int{8000, 6333, 19530},
+	},
+	{
+		class: WorkloadClass{
+			Name: "model-registry", Label: "Model Registry",
+			RiskMultiplier: 1.40,
+			Reason:         "Model registries store trained models and artifacts; compromise enables model poisoning and supply chain attacks",
+		},
+		imageHints: []string{"mlflow", "wandb", "neptune", "clearml", "bentoml", "seldon"},
+		nameHints:  []string{"model-registry", "model-store", "artifact", "mlflow", "wandb", "model-repo"},
+		portHints:  []int{5000},
 	},
 	{
 		class: WorkloadClass{
@@ -237,6 +287,20 @@ func ClassifyAll(scores []types.PlexarScore) []types.PlexarScore {
 		scores[i].Tier = tierFromScore(adjusted)
 	}
 	return scores
+}
+
+// IsAgentClass returns true if the workload class name represents an AI agent workload
+// that has non-deterministic communication patterns and should boost chain risk
+func IsAgentClass(className string) bool {
+	switch strings.ToLower(className) {
+	case "ai-agent", "ai agent runtime",
+		"llm-inference", "llm inference",
+		"ai-gateway", "ai gateway",
+		"rag-pipeline", "rag pipeline",
+		"model-registry", "model registry":
+		return true
+	}
+	return false
 }
 
 func tierFromScore(score int) string {

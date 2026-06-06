@@ -3,7 +3,7 @@ package scorer
 import (
 	"fmt"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 func maxCVEScore() int         { return activeWeights.CVE }

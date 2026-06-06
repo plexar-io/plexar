@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/plexar-security/plexar/internal/types"
+	"github.com/plexar-io/plexar/internal/types"
 )
 
 const (
@@ -52,7 +52,7 @@ func (c *Client) PushEvidence(record *types.EvidenceRecord) (*PushResult, error)
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", "plexar-security/1.0")
+	req.Header.Set("User-Agent", "plexar-io/1.0")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -101,7 +101,7 @@ func (c *Client) PushControls(controls []types.ControlEvidence, clusterName stri
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", "plexar-security/1.0")
+	req.Header.Set("User-Agent", "plexar-io/1.0")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
