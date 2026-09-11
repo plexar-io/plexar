@@ -32,6 +32,9 @@ type SourceOptions struct {
 	Progress io.Writer
 	// Fresh forces re-scan even if cache is valid (Trivy backend only).
 	Fresh bool
+	// ImageSource controls how Trivy accesses container images.
+	// "auto" (default) probes the node; "crio" forces CRI-O export via skopeo.
+	ImageSource string
 }
 
 // NewSource creates a VulnSource by name.
@@ -46,7 +49,7 @@ func NewSource(name string, opts ...SourceOptions) (VulnSource, error) {
 
 	switch name {
 	case SourceTrivy, "":
-		return &TrivyScanner{Progress: opt.Progress, Fresh: opt.Fresh}, nil
+		return &TrivyScanner{Progress: opt.Progress, Fresh: opt.Fresh, ImageSource: opt.ImageSource}, nil
 	case SourceTrivyOperator:
 		return &TrivyOperatorScanner{}, nil
 	case SourceNone:

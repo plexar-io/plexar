@@ -51,6 +51,7 @@ type VulnSummary struct {
 	TotalCount   int       `json:"totalCount"`
 	FixableCount int       `json:"fixableCount"`
 	TopCVEs      []CVEInfo `json:"topCVEs,omitempty"`
+	AllCVEs      []CVEInfo `json:"allCVEs,omitempty"`
 	PodName      string    `json:"podName"`
 	ImageName    string    `json:"imageName"`
 }

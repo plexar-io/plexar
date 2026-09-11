@@ -185,8 +185,7 @@
   .stat-change.up { color: var(--error-light); }
   .stat-change.down { color: var(--success); }
 
-  .sparkline { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 12px; }
-  .sparkline .bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 5px; transition: height 0.3s; }
+
 
   /* ─── Network Graph (D3 Force) ─── */
   .graph-container {
@@ -319,6 +318,59 @@
   }
   .toggle.on::after { left: 21px; }
 
+  /* ─── In Use Toggle Pill ─── */
+  .inuse-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 6px 5px 14px; border-radius: 20px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    cursor: pointer; user-select: none; transition: all 0.25s;
+    font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  }
+  .inuse-toggle:hover { border-color: var(--primary); }
+  .inuse-toggle.active {
+    background: rgba(102,187,106,0.12); border-color: var(--success);
+    color: var(--success);
+  }
+  .inuse-toggle .pill {
+    width: 38px; height: 20px; border-radius: 10px;
+    background: var(--border); position: relative; transition: background 0.25s;
+  }
+  .inuse-toggle.active .pill { background: var(--success); }
+  .inuse-toggle .pill::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: left 0.25s; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .inuse-toggle.active .pill::after { left: 20px; }
+
+  /* ─── Noise Reduction Banner ─── */
+  .noise-banner {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 20px; margin-bottom: 20px;
+    box-shadow: var(--shadow); transition: all 0.3s;
+  }
+  .noise-banner.active-filter {
+    border-color: var(--success); background: rgba(102,187,106,0.05);
+  }
+  .noise-bar-outer {
+    flex: 1; height: 10px; background: rgba(255,255,255,0.06);
+    border-radius: 5px; overflow: hidden; position: relative;
+  }
+  .noise-bar-inuse {
+    height: 100%; border-radius: 5px; transition: width 0.6s;
+    background: linear-gradient(90deg, var(--error-light), var(--warning));
+  }
+  .noise-bar-dormant {
+    position: absolute; top: 0; right: 0; height: 100%;
+    border-radius: 0 5px 5px 0;
+    background: var(--success); opacity: 0.25;
+  }
+  .noise-stats {
+    display: flex; gap: 20px; font-size: 12px; white-space: nowrap;
+  }
+  .noise-stat-val { font-size: 18px; font-weight: 700; }
+
   /* ─── Activity ─── */
   .activity-item {
     display: flex; gap: 12px; padding: 12px 0;
@@ -381,45 +433,55 @@
     <div class="nav-item active" onclick="showPage('dashboard')">
       <span class="mi">dashboard</span> Dashboard
     </div>
-    <div class="nav-item" onclick="showPage('topology')">
-      <span class="mi">hub</span> Topology
-    </div>
     <div class="nav-item" onclick="showPage('pods')">
       <span class="mi">dns</span> Pods
       <span class="badge" id="badge-critical-pods">0</span>
     </div>
-    
-    <div class="nav-section">Security</div>
-    <div class="nav-item" onclick="showPage('compliance')">
-      <span class="mi">verified_user</span> Compliance
+    <div class="nav-item" onclick="showPage('cves')">
+      <span class="mi">bug_report</span> CVE Explorer
+      <span class="badge" id="badge-total-cves">0</span>
     </div>
-    <div class="nav-item" onclick="showPage('rbac')">
-      <span class="mi">admin_panel_settings</span> RBAC
-      <span class="badge" id="badge-rbac-crit">0</span>
+
+    <div class="nav-item nav-more-toggle" onclick="toggleMore()">
+      <span class="mi">more_horiz</span> More
+      <span class="mi" id="nav-more-chevron" style="margin-left:auto;font-size:18px">expand_more</span>
     </div>
-    <div class="nav-item" onclick="showPage('alerts')">
-      <span class="mi">notifications</span> Alerts
-      <span class="badge" id="badge-alert-count">0</span>
-    </div>
-    <div class="nav-item" onclick="showPage('runtime')">
-      <span class="mi">memory</span> Runtime Insights
-    </div>
-    <div class="nav-item" onclick="showPage('attackpath')">
-      <span class="mi">route</span> Attack Paths
-      <span class="badge" id="badge-attack-crit">0</span>
-    </div>
-    
-    <div class="nav-section">Evidence</div>
-    <div class="nav-item" onclick="showPage('evidence')">
-      <span class="mi">fact_check</span> Evidence Vault
-    </div>
-    <div class="nav-item" onclick="showPage('integrations')">
-      <span class="mi">cloud_sync</span> Integrations
-    </div>
-    
-    <div class="nav-section">System</div>
-    <div class="nav-item" onclick="showPage('settings')">
-      <span class="mi">settings</span> Settings
+    <div id="nav-more" style="display:none">
+      <div class="nav-section">Security</div>
+      <div class="nav-item" onclick="showPage('topology')">
+        <span class="mi">hub</span> Topology
+      </div>
+      <div class="nav-item" onclick="showPage('attackpath')">
+        <span class="mi">route</span> Attack Paths
+        <span class="badge" id="badge-attack-crit">0</span>
+      </div>
+      <div class="nav-item" onclick="showPage('runtime')">
+        <span class="mi">memory</span> Runtime Insights
+      </div>
+      <div class="nav-item" onclick="showPage('rbac')">
+        <span class="mi">admin_panel_settings</span> RBAC
+        <span class="badge" id="badge-rbac-crit">0</span>
+      </div>
+      <div class="nav-item" onclick="showPage('compliance')">
+        <span class="mi">verified_user</span> Compliance
+      </div>
+      <div class="nav-item" onclick="showPage('alerts')">
+        <span class="mi">notifications</span> Alerts
+        <span class="badge" id="badge-alert-count">0</span>
+      </div>
+
+      <div class="nav-section">Evidence</div>
+      <div class="nav-item" onclick="showPage('evidence')">
+        <span class="mi">fact_check</span> Evidence Vault
+      </div>
+      <div class="nav-item" onclick="showPage('integrations')">
+        <span class="mi">cloud_sync</span> Integrations
+      </div>
+
+      <div class="nav-section">System</div>
+      <div class="nav-item" onclick="showPage('settings')">
+        <span class="mi">settings</span> Settings
+      </div>
     </div>
   </div>
   
@@ -439,6 +501,11 @@
     <div class="topbar">
       <h1>Dashboard</h1>
       <div class="topbar-right">
+        <div class="inuse-toggle" id="inuse-toggle" onclick="toggleInUseFilter()" title="Filter to show only In Use CVEs (loaded in memory at runtime)">
+          <span class="mi" style="font-size:16px">memory</span>
+          <span id="inuse-toggle-label">In Use Only</span>
+          <div class="pill"></div>
+        </div>
         <div class="chip chip-error" id="chip-alerts"><span class="mi" style="font-size:16px">warning</span> <span id="chip-alerts-text">0 alerts</span></div>
         <div class="chip chip-info" id="chip-scan-time"><span class="mi" style="font-size:16px">schedule</span> <span id="chip-scan-text">Scanning...</span></div>
         <button class="btn btn-primary" onclick="exportPDF()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">download</span> Export Report</button>
@@ -449,6 +516,38 @@
       <span id="scan-banner-text">Scan in progress... Dashboard data will update automatically when complete.</span>
     </div>
     <div class="page-content">
+      <div class="noise-banner" id="noise-banner">
+        <div style="display:flex;align-items:center;gap:8px;min-width:130px">
+          <span class="mi" style="font-size:20px;color:var(--success)">filter_alt</span>
+          <div>
+            <div style="font-size:13px;font-weight:500" id="noise-title">Runtime CVE Analysis</div>
+            <div style="font-size:11px;color:var(--text-secondary)" id="noise-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)">
+            <span id="noise-bar-label-left">In Use</span>
+            <span id="noise-bar-label-right">Dormant (noise)</span>
+          </div>
+          <div class="noise-bar-outer">
+            <div class="noise-bar-inuse" id="noise-bar-fill" style="width:100%"></div>
+          </div>
+        </div>
+        <div class="noise-stats">
+          <div style="text-align:center">
+            <div class="noise-stat-val" style="color:var(--error-light)" id="noise-inuse-count">-</div>
+            <div style="color:var(--text-secondary)">In Use</div>
+          </div>
+          <div style="text-align:center">
+            <div class="noise-stat-val" style="color:var(--success)" id="noise-dormant-count">-</div>
+            <div style="color:var(--text-secondary)">Dormant</div>
+          </div>
+          <div style="text-align:center">
+            <div class="noise-stat-val" style="color:var(--primary-light)" id="noise-reduction-pct">-%</div>
+            <div style="color:var(--text-secondary)">Noise Cut</div>
+          </div>
+        </div>
+      </div>
       <div class="grid-4" style="margin-bottom:20px" id="dash-stats"></div>
       <div class="grid-4" style="margin-bottom:20px" id="dash-chain-stats"></div>
       <div class="grid-2" style="margin-bottom:18px">
@@ -513,7 +612,7 @@
         </div>
         <div class="detail-cols">
           <div><div class="detail-section"><h4>Blast Radius &mdash; If Exploited, Attacker Reaches:</h4><div id="topo-blast-list"></div></div></div>
-          <div><div class="detail-section"><h4>Top CVEs</h4><table class="data-table"><thead><tr><th>CVE</th><th>Severity</th><th>CVSS</th><th>Package</th></tr></thead><tbody id="topo-cve-list"></tbody></table></div></div>
+          <div><div class="detail-section"><h4>Top CVEs</h4><table class="data-table"><thead><tr><th>CVE</th><th>Severity</th><th>CVSS</th><th>Package</th><th>Status</th></tr></thead><tbody id="topo-cve-list"></tbody></table></div></div>
         </div>
       </div>
     </div>
@@ -673,6 +772,79 @@
   </div>
 
   <!-- ═══════════════════════════════ -->
+  <!-- PAGE: CVE EXPLORER             -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-cves">
+    <div class="topbar">
+      <h1>CVE Explorer</h1>
+      <div class="topbar-right">
+        <select class="btn" style="appearance:auto" id="cve-ns-filter" onchange="loadCVEs()">
+          <option value="">All Namespaces</option>
+        </select>
+        <select class="btn" style="appearance:auto" id="cve-sev-filter" onchange="loadCVEs()">
+          <option value="">All Severities</option>
+          <option value="CRITICAL">Critical</option>
+          <option value="HIGH">High</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="LOW">Low</option>
+        </select>
+        <select class="btn" style="appearance:auto" id="cve-status-filter" onchange="loadCVEs()">
+          <option value="">All Statuses</option>
+          <option value="all-inuse">All In Use</option>
+          <option value="dormant">Dormant</option>
+          <option value="likely">Likely (fuzzy match)</option>
+          <option value="unprofiled">Unprofiled</option>
+          <option value="inuse">In Use (confirmed)</option>
+        </select>
+        <input class="btn" style="width:180px" type="text" id="cve-pkg-search" placeholder="Search package..." oninput="debounceCVESearch()">
+        <button class="btn" onclick="exportCVEsCSV()"><span class="mi" style="font-size:16px;vertical-align:text-bottom">download</span> Export</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="grid-4" style="margin-bottom:20px" id="cve-stats"></div>
+      <!-- Status Legend -->
+      <div class="card" style="margin-bottom:16px;padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:12px">
+          <span style="font-weight:600;color:var(--text-secondary)">Status Legend:</span>
+          <span><span style="background:var(--error-bg);color:var(--error-light);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">IN USE</span> Package is loaded in memory at runtime (confirmed via /proc)</span>
+          <span><span style="background:var(--warning-bg);color:var(--warning);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">LIKELY</span> Fuzzy match against runtime profile (e.g. libssl = openssl)</span>
+          <span><span style="background:var(--warning-bg);color:var(--text-secondary);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">UNPROFILED</span> No runtime data available -- scan was run without /proc access</span>
+          <span><span style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">DORMANT</span> Package is installed but NOT loaded at runtime -- safe to deprioritize</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2 id="cve-table-title">All Vulnerabilities</h2>
+          <div style="font-size:12px;color:var(--text-secondary)" id="cve-count-label">Loading...</div>
+        </div>
+        <div style="max-height:600px;overflow-y:auto">
+          <table class="data-table">
+            <thead><tr>
+              <th style="cursor:pointer" onclick="sortCVEs('severity')">Severity</th>
+              <th style="cursor:pointer" onclick="sortCVEs('cvss')">CVSS</th>
+              <th style="cursor:pointer" onclick="sortCVEs('id')">CVE ID</th>
+              <th style="cursor:pointer" onclick="sortCVEs('package')">Package</th>
+              <th>Installed</th>
+              <th>Fixed</th>
+              <th style="cursor:pointer" onclick="sortCVEs('namespace')">Namespace</th>
+              <th style="cursor:pointer" onclick="sortCVEs('pod')">Pod</th>
+              <th>Status</th>
+            </tr></thead>
+            <tbody id="cve-tbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-top:1px solid var(--border)">
+          <span style="font-size:12px;color:var(--text-secondary)" id="cve-page-info">Page 1</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="cve-prev-btn" onclick="cvePrevPage()" disabled>Previous</button>
+            <button class="btn" id="cve-next-btn" onclick="cveNextPage()">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ -->
   <!-- PAGE: RUNTIME INSIGHTS         -->
   <!-- ═══════════════════════════════ -->
   <div class="page" id="page-runtime">
@@ -764,7 +936,66 @@ const S = {
   runtime: null,
   attackpath: null,
   chains: null,
+  inUseOnly: false,
 };
+
+// Toggle In Use filter and re-render
+function toggleInUseFilter() {
+  S.inUseOnly = !S.inUseOnly;
+  const toggle = document.getElementById('inuse-toggle');
+  const banner = document.getElementById('noise-banner');
+  if (S.inUseOnly) {
+    toggle.classList.add('active');
+    banner.classList.add('active-filter');
+  } else {
+    toggle.classList.remove('active');
+    banner.classList.remove('active-filter');
+  }
+  renderDashboard();
+  renderPods();
+}
+
+// Count CVEs from topCVEs array filtered by inUse if toggle is on
+function countCVEs(vulns) {
+  if (!S.inUseOnly) {
+    return { critical: vulns.critical || 0, high: vulns.high || 0, medium: vulns.medium || 0, total: vulns.totalCount || 0 };
+  }
+  // Filter from topCVEs
+  const cves = (vulns.topCVEs || []).filter(c => c.inUse);
+  let critical = 0, high = 0, medium = 0;
+  cves.forEach(c => {
+    const sev = (c.severity || '').toUpperCase();
+    if (sev === 'CRITICAL') critical++;
+    else if (sev === 'HIGH') high++;
+    else if (sev === 'MEDIUM') medium++;
+  });
+  return { critical, high, medium, total: cves.length };
+}
+
+// Compute cluster-wide noise reduction stats from all pods
+function computeNoiseStats() {
+  if (!S.scan || !S.scan.scores) return { total: 0, inUse: 0, dormant: 0, pct: 0 };
+  let totalAll = 0, inUseCount = 0;
+  const scores = S.scan.scores || [];
+  // Use runtime API data if available
+  const rt = S.runtime || {};
+  if (rt.totalCves > 0) {
+    return { total: rt.totalCves, inUse: rt.inUseCves || 0, dormant: rt.totalCves - (rt.inUseCves || 0), pct: rt.noiseReduction || 0 };
+  }
+  // Fallback: estimate from topCVEs inUse flags
+  scores.forEach(s => {
+    const cves = s.vulns.topCVEs || [];
+    totalAll += s.vulns.totalCount || cves.length;
+    cves.forEach(c => { if (c.inUse) inUseCount++; });
+  });
+  // Scale estimate: topCVEs are a sample, extrapolate ratio
+  const sampleTotal = scores.reduce((sum, s) => sum + (s.vulns.topCVEs || []).length, 0);
+  const ratio = sampleTotal > 0 ? inUseCount / sampleTotal : 1;
+  const estInUse = Math.round(totalAll * ratio);
+  const dormant = totalAll - estInUse;
+  const pct = totalAll > 0 ? ((dormant / totalAll) * 100) : 0;
+  return { total: totalAll, inUse: estInUse, dormant, pct };
+}
 
 const TIER_COLORS = { critical:'#ef5350', high:'#ffa726', medium:'#42a5f5', low:'#66bb6a' };
 function tierColor(t) { return TIER_COLORS[t] || '#8796a5'; }
@@ -790,12 +1021,41 @@ function esc(s) { if (s == null) return ''; const d=document.createElement('div'
 // ═══════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════
+const MORE_PAGES = ['topology', 'attackpath', 'runtime', 'rbac', 'compliance', 'alerts', 'evidence', 'integrations', 'settings'];
+
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + pageId).classList.add('active');
   if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  // Keep the "More" group open whenever one of its pages is active
+  if (MORE_PAGES.includes(pageId)) setMoreOpen(true);
   if (pageId === 'topology') setTimeout(renderTopology, 100);
+  if (pageId === 'cves' && cveData.length === 0) loadCVEs();
+}
+
+function setMoreOpen(open) {
+  document.getElementById('nav-more').style.display = open ? 'block' : 'none';
+  document.getElementById('nav-more-chevron').textContent = open ? 'expand_less' : 'expand_more';
+}
+
+function toggleMore() {
+  setMoreOpen(document.getElementById('nav-more').style.display === 'none');
+}
+
+// Confidence-aware "in use" badge. When there's no /proc runtime profile, CVEs
+// are conservatively flagged (confidence 0.5) — do NOT present those as a
+// confirmed "IN USE" hit, or the headline claim reads as noise to users.
+function inUseBadge(c, size) {
+  const pad = size === 'sm' ? '1px 6px' : '2px 8px';
+  const fs = size === 'sm' ? '9px' : '10px';
+  const br = size === 'sm' ? '8px' : '10px';
+  const base = `padding:${pad};border-radius:${br};font-size:${fs};font-weight:500`;
+  if (!c.inUse) return `<span style="background:var(--success-bg);color:var(--success);${base}">DORMANT</span>`;
+  const conf = c.confidence || 0;
+  if (conf >= 1.0) return `<span title="Exact package match in runtime profile" style="background:var(--error-bg);color:var(--error-light);${base}">IN USE</span>`;
+  if (conf >= 0.7) return `<span title="Fuzzy runtime match" style="background:var(--warning-bg);color:var(--warning);${base}">LIKELY</span>`;
+  return `<span title="No runtime profile available — conservatively flagged. Run with /proc access to confirm." style="background:var(--warning-bg);color:var(--text-secondary);${base}">UNPROFILED</span>`;
 }
 
 // ═══════════════════════════════════════
@@ -870,6 +1130,7 @@ function renderAll() {
     ['renderIntegrations', renderIntegrations],
     ['renderRuntime', renderRuntime],
     ['renderAttackPath', renderAttackPath],
+    ['renderCVEExplorer', renderCVEExplorer],
     ['renderSettings', renderSettings],
   ];
   for (const [name, fn] of fns) {
@@ -924,52 +1185,54 @@ function renderDashboard() {
   if (!d) return;
 
   const scores = d.scores || [];
-  const critCVEs = scores.reduce((sum, s) => sum + s.vulns.critical, 0);
+  const critCVEs = scores.reduce((sum, s) => sum + countCVEs(s.vulns).critical, 0);
+  const highCVEsAll = scores.reduce((sum, s) => sum + countCVEs(s.vulns).high, 0);
   const unprotected = scores.filter(s => !s.blast.hasNetworkPolicy).length;
   const avgCompliance = S.compliance.length ? Math.round(S.compliance.reduce((s,c) => s+c.score, 0) / S.compliance.length) : 0;
 
-  // History sparkline data
-  const hist = S.history.slice(-12);
-  const maxScore = Math.max(...hist.map(h => h.clusterScore), 1);
-
-  function sparkline(values, color) {
-    const mx = Math.max(...values, 1);
-    return values.map((v,i) => {
-      const h = Math.round((v/mx)*90) + 10;
-      const op = i === values.length-1 ? '1' : '0.25';
-      return `<div class="bar" style="height:${h}%;background:${color};opacity:${op}"></div>`;
-    }).join('');
+  // Render noise reduction banner
+  const noise = computeNoiseStats();
+  const inUsePct = noise.total > 0 ? Math.round((noise.inUse / noise.total) * 100) : 100;
+  document.getElementById('noise-inuse-count').textContent = noise.inUse.toLocaleString();
+  document.getElementById('noise-dormant-count').textContent = noise.dormant.toLocaleString();
+  document.getElementById('noise-reduction-pct').textContent = noise.pct.toFixed(0) + '%';
+  document.getElementById('noise-bar-fill').style.width = inUsePct + '%';
+  if (noise.pct > 0) {
+    document.getElementById('noise-bar-label-left').textContent = 'In Use (' + inUsePct + '%)';
+    document.getElementById('noise-bar-label-right').textContent = 'Dormant (' + (100 - inUsePct) + '%)';
+    document.getElementById('noise-subtitle').textContent = noise.pct.toFixed(0) + '% of CVEs are in packages not loaded at runtime';
+    document.getElementById('noise-title').textContent = 'Runtime CVE Analysis';
+  } else {
+    // No /proc profile: every CVE is only conservatively flagged, so don't
+    // claim "100% in use" — that reads as noise and erodes trust.
+    document.getElementById('noise-bar-label-left').textContent = 'Unprofiled';
+    document.getElementById('noise-bar-label-right').textContent = '';
+    document.getElementById('noise-subtitle').textContent = 'Runtime profiling unavailable — showing all CVEs. Run with /proc access to filter to what is actually in use.';
+    document.getElementById('noise-title').textContent = 'Runtime Profiling Unavailable';
   }
-
-  const histScores = hist.map(h => h.clusterScore);
-  const histUnprot = hist.map(h => h.unprotectedPods);
-  const histCrit = hist.map(h => h.criticalCVEs);
-  const histComp = hist.map(h => h.complianceScore);
+  const filterLabel = S.inUseOnly ? 'Showing In Use Only' : 'In Use Only';
+  document.getElementById('inuse-toggle-label').textContent = filterLabel;
 
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat-card accent-blue">
       <div class="stat-icon blue"><span class="mi">speed</span></div>
       <div class="stat-label">Cluster Risk Score</div>
       <div class="stat-value" style="color:${scoreColor(d.clusterScore)}">${d.clusterScore}<span class="stat-sub">/100</span></div>
-      <div class="sparkline">${sparkline(histScores, 'rgba(25,118,210,0.5)')}</div>
     </div>
     <div class="stat-card accent-warning">
       <div class="stat-icon orange"><span class="mi">shield</span></div>
       <div class="stat-label">Pods Without NetworkPolicy</div>
       <div class="stat-value" style="color:var(--warning)">${unprotected}<span class="stat-sub">/${d.totalPods}</span></div>
-      <div class="sparkline">${sparkline(histUnprot, 'rgba(255,167,38,0.5)')}</div>
     </div>
     <div class="stat-card accent-error">
       <div class="stat-icon red"><span class="mi">bug_report</span></div>
-      <div class="stat-label">Critical CVEs</div>
+      <div class="stat-label">Critical CVEs${S.inUseOnly ? ' (In Use)' : ''}</div>
       <div class="stat-value" style="color:var(--error-light)">${critCVEs}</div>
-      <div class="sparkline">${sparkline(histCrit, 'rgba(244,67,54,0.5)')}</div>
     </div>
     <div class="stat-card accent-success">
       <div class="stat-icon green"><span class="mi">policy</span></div>
       <div class="stat-label">Compliance Score</div>
       <div class="stat-value" style="color:var(--success)">${avgCompliance}<span class="stat-sub">%</span></div>
-      <div class="sparkline">${sparkline(histComp, 'rgba(102,187,106,0.5)')}</div>
     </div>`;
 
   // Top-risk table
@@ -979,10 +1242,11 @@ function renderDashboard() {
     const inet = s.blast.internetAccess ? ' + inet' : '';
     const wc = s.workloadClass || '—';
     const mult = s.riskMultiplier && s.riskMultiplier !== 1 ? ` <span style="color:var(--warning);font-size:10px">×${s.riskMultiplier.toFixed(1)}</span>` : '';
+    const cv = countCVEs(s.vulns);
     return `<tr>
       <td>${i+1}</td><td>${esc(shortPod(s.podName))}</td>
       <td style="font-size:11px">${esc(wc)}${mult}</td>
-      <td class="sev-${s.tier === 'critical' ? 'critical' : s.tier === 'high' ? 'high' : 'medium'}">${s.vulns.critical}C ${s.vulns.high}H</td>
+      <td class="sev-${s.tier === 'critical' ? 'critical' : s.tier === 'high' ? 'high' : 'medium'}">${cv.critical}C ${cv.high}H</td>
       <td>${reach} svcs${inet}</td>
       <td style="font-weight:700;color:${scoreColor(s.total)}">${s.total}</td>
       <td><span class="badge-sm badge-${s.tier}">${s.tier.charAt(0).toUpperCase()+s.tier.slice(1)}</span></td>
@@ -1069,16 +1333,22 @@ function renderDashboard() {
       const hopFlow = hops.map((h, i) => {
         const pod = shortPod(h.podName);
         const arrow = i < hops.length - 1 ? `<span style="color:var(--text-disabled);margin:0 4px">\u2192</span>` : '';
-        return `<span style="color:var(--primary-light);font-weight:500" title="${esc(h.cve.id)} (${h.exploitType})">${esc(pod)}</span>${arrow}`;
+        return `<span style="color:var(--primary-light);font-weight:500" title="${esc(h.cve.id)} (${h.exploitType}): ${esc(h.transitionReason)}">${esc(pod)}</span>${arrow}`;
       }).join('');
       const target = c.finalTarget ? `<span style="color:var(--text-disabled);margin:0 4px">\u2192</span><span style="color:${sevCol};font-weight:500">${esc(c.finalTarget)}</span>` : '';
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
-        <span class="badge-sm" style="background:${sevCol}22;color:${sevCol};min-width:28px;text-align:center">${Math.round(c.chainScore)}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${hopFlow}${target}</div>
-          <div style="font-size:10px;color:var(--text-disabled);margin-top:2px">${hops.map(h => h.exploitType).join(' \u2192 ')} &middot; ${hops.length} hop${hops.length !== 1 ? 's' : ''}</div>
+      const breakFixHtml = c.breakFix && c.breakFix.cveId ? `<div style="font-size:10px;color:var(--success);margin-top:3px"><span class="mi" style="font-size:11px;vertical-align:text-bottom">build</span> Break chain: patch ${esc(c.breakFix.cveId)} on ${esc(shortPod(c.breakFix.podName))}</div>` : '';
+      const cveList = hops.map(h => `<span style="color:${h.cve.severity === 'CRITICAL' ? 'var(--error-light)' : 'var(--warning)'};font-size:10px" title="${esc(h.cve.package)} ${esc(h.cve.installedVersion || '')}">${esc(h.cve.id)}</span>`).join(' <span style="color:var(--text-disabled)">\u2192</span> ');
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge-sm" style="background:${sevCol}22;color:${sevCol};min-width:28px;text-align:center">${Math.round(c.chainScore)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${hopFlow}${target}</div>
+            <div style="font-size:10px;color:var(--text-disabled);margin-top:2px">${hops.map(h => h.exploitType).join(' \u2192 ')} &middot; ${hops.length} hop${hops.length !== 1 ? 's' : ''}</div>
+            <div style="font-size:10px;margin-top:2px">${cveList}</div>
+            ${breakFixHtml}
+          </div>
+          <span class="badge-sm badge-${c.severity}" style="font-size:9px">${c.severity.charAt(0).toUpperCase() + c.severity.slice(1)}</span>
         </div>
-        <span class="badge-sm badge-${c.severity}" style="font-size:9px">${c.severity.charAt(0).toUpperCase() + c.severity.slice(1)}</span>
       </div>`;
     }).join('');
   }
@@ -1483,11 +1753,13 @@ function selectTopoPod(podName) {
     return `<div class="blast-item"><span class="mi" style="color:var(--error-light)">${icon}</span><div class="target">${esc(t)}</div><div>${tag}</div></div>`;
   }).join('') + (score.blast.internetAccess ? `<div class="blast-item"><span class="mi" style="color:var(--error-light)">public</span><div class="target">0.0.0.0/0 &mdash; full internet</div><div><span class="tag tag-danger">EXFILTRATE</span></div></div>` : '');
 
-  // CVE list
-  const cves = score.vulns.topCVEs || [];
-  document.getElementById('topo-cve-list').innerHTML = cves.length ? cves.map(c =>
-    `<tr><td>${esc(c.id)}</td><td class="sev-${c.severity.toLowerCase()}">${c.severity}</td><td>${c.cvss}</td><td>${esc(c.package)}</td></tr>`
-  ).join('') : '<tr><td colspan="4" style="color:var(--text-secondary)">No CVE data available</td></tr>';
+  // CVE list (filtered by In Use toggle)
+  const allCves = score.vulns.topCVEs || [];
+  const cves = S.inUseOnly ? allCves.filter(c => c.inUse) : allCves;
+  document.getElementById('topo-cve-list').innerHTML = cves.length ? cves.map(c => {
+    const inUseTag = inUseBadge(c, 'sm');
+    return `<tr><td>${esc(c.id)}</td><td class="sev-${c.severity.toLowerCase()}">${c.severity}</td><td>${c.cvss}</td><td>${esc(c.package)}</td><td>${inUseTag}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" style="color:var(--text-secondary)">' + (S.inUseOnly ? 'No in-use CVEs' : 'No CVE data available') + '</td></tr>';
 
   if (currentView === 'selected') applyViewFilter();
 }
@@ -1532,14 +1804,15 @@ function renderPods() {
     const netpol = s.blast.hasNetworkPolicy;
     const wc = s.workloadClass || 'General';
     const mult = s.riskMultiplier && s.riskMultiplier !== 1 ? `<br><span style="color:var(--warning);font-size:10px">×${s.riskMultiplier.toFixed(2)}</span>` : '';
+    const cv = countCVEs(s.vulns);
     return `<tr>
       <td>${i+1}</td>
       <td><strong>${esc(shortPod(s.podName))}</strong></td>
       <td>${esc(s.namespace)}</td>
       <td style="font-size:11px">${esc(wc)}${mult}</td>
       <td>${esc(s.imageName)}</td>
-      <td class="sev-critical">${s.vulns.critical}</td>
-      <td class="sev-high">${s.vulns.high}</td>
+      <td class="sev-critical">${cv.critical}</td>
+      <td class="sev-high">${cv.high}</td>
       <td>${reach}</td>
       <td style="color:${inet?'var(--error-light)':'var(--success)'}">${inet?'Yes':'No'}</td>
       <td style="color:${netpol?'var(--success)':'var(--error-light)'}">${netpol?'Applied':'None'}</td>
@@ -1968,9 +2241,7 @@ function renderRuntime() {
 
   document.getElementById('runtime-cve-tbody').innerHTML = allCVEs.slice(0, 30).map(c => {
     const sevColor = c.severity === 'CRITICAL' ? 'var(--error-light)' : c.severity === 'HIGH' ? 'var(--warning)' : 'var(--primary-light)';
-    const inUseTag = c.inUse
-      ? '<span style="background:var(--error-bg);color:var(--error-light);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500">IN USE</span>'
-      : '<span style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500">DORMANT</span>';
+    const inUseTag = inUseBadge(c);
     return `<tr>
       <td>${esc(shortPod(c.pod))}</td>
       <td style="font-family:monospace;font-size:12px">${esc(c.id)}</td>
@@ -2051,11 +2322,41 @@ function renderAttackPath() {
       </div>`;
     }).join('');
 
-    const edgesDetail = (p.edges || []).map(e =>
-      `<div style="font-size:11px;color:var(--text-secondary);padding:4px 0;border-bottom:1px solid var(--border)">
-        <span style="color:${sevCol};font-weight:500">${edgeTypeLabels[e.attackType] || e.attackType}</span> — ${esc(e.description)}
-      </div>`
-    ).join('');
+    // Build rich edge details with remediation, metadata, CVE info
+    const edgesDetail = (p.edges || []).map((e, ei) => {
+      const fromNode = (p.nodes || [])[ei] || {};
+      const toNode = (p.nodes || [])[ei + 1] || {};
+      const fromMeta = fromNode.metadata || {};
+      const toMeta = toNode.metadata || {};
+      const fromCVEs = fromNode.cves || [];
+      const remediation = e.remediation ? `<div style="margin-top:4px;padding:6px 10px;background:var(--success)11;border-left:3px solid var(--success);border-radius:0 4px 4px 0;font-size:11px;color:var(--success)"><span class="mi" style="font-size:13px;vertical-align:text-bottom">build</span> ${esc(e.remediation)}</div>` : '';
+      // Show metadata (secrets, service account, image, etc.)
+      const metaItems = [];
+      if (fromMeta.serviceAccount) metaItems.push('<span class="mi" style="font-size:12px;vertical-align:text-bottom">person</span> SA: ' + esc(fromMeta.serviceAccount));
+      if (fromMeta.image) metaItems.push('<span class="mi" style="font-size:12px;vertical-align:text-bottom">inventory_2</span> ' + esc(fromMeta.image));
+      if (fromMeta.namespace) metaItems.push('<span class="mi" style="font-size:12px;vertical-align:text-bottom">folder</span> ' + esc(fromMeta.namespace));
+      if (toMeta.secretName) metaItems.push('<span class="mi" style="font-size:12px;vertical-align:text-bottom">vpn_key</span> Secret: ' + esc(toMeta.secretName));
+      if (toMeta.roleName) metaItems.push('<span class="mi" style="font-size:12px;vertical-align:text-bottom">admin_panel_settings</span> Role: ' + esc(toMeta.roleName));
+      if (fromMeta.privileged === 'true') metaItems.push('<span style="color:var(--error-light)"><span class="mi" style="font-size:12px;vertical-align:text-bottom">warning</span> Privileged container</span>');
+      if (fromMeta.hostPID === 'true') metaItems.push('<span style="color:var(--error-light)"><span class="mi" style="font-size:12px;vertical-align:text-bottom">warning</span> hostPID enabled</span>');
+      if (fromMeta.hostNetwork === 'true') metaItems.push('<span style="color:var(--warning)"><span class="mi" style="font-size:12px;vertical-align:text-bottom">lan</span> hostNetwork</span>');
+      const metaHtml = metaItems.length ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--text-disabled)">${metaItems.join('')}</div>` : '';
+      // Show CVEs associated with this node
+      const cveHtml = fromCVEs.length ? `<div style="margin-top:4px;font-size:10px;color:var(--text-disabled)"><span class="mi" style="font-size:12px;vertical-align:text-bottom">bug_report</span> CVEs: ${fromCVEs.slice(0, 3).map(c => '<span style="color:' + (c.severity === 'CRITICAL' ? 'var(--error-light)' : 'var(--warning)') + '">' + esc(c.id) + '</span>').join(', ')}${fromCVEs.length > 3 ? ' +' + (fromCVEs.length - 3) + ' more' : ''}</div>` : '';
+      return `<div style="font-size:11px;color:var(--text-secondary);padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:${sevCol};font-weight:600">${edgeTypeLabels[e.attackType] || e.attackType}</span>
+          <span style="color:var(--text-disabled)">|</span>
+          <span>weight: ${e.weight}</span>
+          <span style="color:var(--text-disabled)">|</span>
+          <span>${esc(fromNode.label || e.from)} <span style="color:var(--text-disabled)">\u2192</span> ${esc(toNode.label || e.to)}</span>
+        </div>
+        <div style="margin-top:2px">${esc(e.description)}</div>
+        ${metaHtml}${cveHtml}${remediation}
+      </div>`;
+    }).join('');
+
+    const riskReduction = p.riskReduction ? `<div style="margin-top:8px;padding:8px 12px;background:var(--info)11;border-radius:6px;font-size:11px;color:var(--info)"><span class="mi" style="font-size:14px;vertical-align:text-bottom">trending_down</span> ${esc(p.riskReduction)}</div>` : '';
 
     return `<div class="card">
       <div class="card-header">
@@ -2066,6 +2367,7 @@ function renderAttackPath() {
         <span style="font-size:12px;color:var(--text-secondary)">Score: <strong style="color:${sevCol}">${p.score.toFixed(0)}</strong> | ${p.hopCount} hops</span>
       </div>
       <div style="display:flex;align-items:center;overflow-x:auto;padding:12px 0;gap:0">${nodesHtml}</div>
+      ${riskReduction}
       <div id="ap-detail-${idx}" style="display:none;margin-top:12px;padding:12px;background:var(--bg-surface);border-radius:8px">${edgesDetail}</div>
       <div style="text-align:center;margin-top:8px">
         <span style="cursor:pointer;font-size:12px;color:var(--primary-light)" onclick="toggleAPDetail(${idx})">Show Details <span class="mi" style="font-size:14px;vertical-align:text-bottom" id="ap-chevron-${idx}">expand_more</span></span>
@@ -2254,6 +2556,212 @@ ${driftRows ? `<div class="page-break"></div>
   win.document.write(html);
   win.document.close();
   setTimeout(() => win.print(), 500);
+}
+
+// ═══════════════════════════════════════
+// CVE EXPLORER
+// ═══════════════════════════════════════
+let cveData = [];     // full dataset from API
+let cvePage = 0;
+const CVE_PAGE_SIZE = 50;
+let cveSortKey = 'cvss';
+let cveSortAsc = false;
+let cveSearchTimer = null;
+
+function debounceCVESearch() {
+  clearTimeout(cveSearchTimer);
+  cveSearchTimer = setTimeout(loadCVEs, 300);
+}
+
+async function loadCVEs() {
+  const ns = document.getElementById('cve-ns-filter')?.value || '';
+  const sev = document.getElementById('cve-sev-filter')?.value || '';
+  const status = document.getElementById('cve-status-filter')?.value || '';
+  const pkg = document.getElementById('cve-pkg-search')?.value || '';
+
+  // Map status filter to server-side inuse param for broad categories
+  let inuse = '';
+  if (status === 'all-inuse') inuse = 'true';
+  else if (status === 'dormant') inuse = 'false';
+
+  let url = '/api/cves?';
+  if (ns) url += 'namespace=' + encodeURIComponent(ns) + '&';
+  if (sev) url += 'severity=' + encodeURIComponent(sev) + '&';
+  if (inuse) url += 'inuse=' + encodeURIComponent(inuse) + '&';
+  if (pkg) url += 'package=' + encodeURIComponent(pkg) + '&';
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    cveDataFull = data.cves || [];
+    // Apply client-side confidence filter for granular statuses
+    if (status === 'inuse') {
+      cveData = cveDataFull.filter(c => c.inUse && (c.confidence || 0) >= 1.0);
+    } else if (status === 'likely') {
+      cveData = cveDataFull.filter(c => c.inUse && (c.confidence || 0) >= 0.7 && (c.confidence || 0) < 1.0);
+    } else if (status === 'unprofiled') {
+      cveData = cveDataFull.filter(c => c.inUse && (c.confidence || 0) < 0.7);
+    } else {
+      cveData = cveDataFull.slice();
+    }
+    cvePage = 0;
+    renderCVEExplorer();
+  } catch (e) {
+    console.warn('CVE fetch error:', e);
+  }
+}
+
+let cveDataFull = []; // unfiltered copy from API
+
+function sortCVEs(key) {
+  if (cveSortKey === key) {
+    cveSortAsc = !cveSortAsc;
+  } else {
+    cveSortKey = key;
+    cveSortAsc = false;
+  }
+  const dir = cveSortAsc ? 1 : -1;
+  const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  cveData.sort((a, b) => {
+    let av, bv;
+    switch (key) {
+      case 'severity': av = sevOrder[a.severity] || 9; bv = sevOrder[b.severity] || 9; break;
+      case 'cvss': av = a.cvss; bv = b.cvss; break;
+      case 'id': av = a.id; bv = b.id; break;
+      case 'package': av = (a.package || '').toLowerCase(); bv = (b.package || '').toLowerCase(); break;
+      case 'namespace': av = a.namespace; bv = b.namespace; break;
+      case 'pod': av = a.podName; bv = b.podName; break;
+      default: av = a.cvss; bv = b.cvss;
+    }
+    if (av < bv) return -dir;
+    if (av > bv) return dir;
+    return 0;
+  });
+  cvePage = 0;
+  renderCVEExplorer();
+}
+
+function cvePrevPage() { if (cvePage > 0) { cvePage--; renderCVEExplorer(); } }
+function cveNextPage() {
+  if ((cvePage + 1) * CVE_PAGE_SIZE < cveData.length) { cvePage++; renderCVEExplorer(); }
+}
+
+function renderCVEExplorer() {
+  // Populate namespace dropdown from scan data (works with --load, no live cluster needed)
+  const nsSelect = document.getElementById('cve-ns-filter');
+  if (nsSelect && nsSelect.options.length <= 1) {
+    const nsSet = new Set();
+    if (S.scan && S.scan.scores) S.scan.scores.forEach(s => { if (s.namespace) nsSet.add(s.namespace); });
+    // Fallback to S.namespaces if scan data has none
+    if (nsSet.size === 0 && S.namespaces) S.namespaces.forEach(n => nsSet.add(n));
+    const nsList = [...nsSet].sort();
+    if (nsList.length) {
+      const cur = nsSelect.value;
+      nsSelect.innerHTML = '<option value="">All Namespaces</option>' +
+        nsList.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+      if (cur) nsSelect.value = cur;
+    }
+  }
+
+  // Stats — use authoritative vulns.critical/high totals from scan data so
+  // the numbers match the dashboard, even when only topCVEs (top-10 sample)
+  // are available.  Fall back to counting cveData rows when filters are active.
+  const hasFilter = (document.getElementById('cve-ns-filter')?.value || '') !== '' ||
+    (document.getElementById('cve-sev-filter')?.value || '') !== '' ||
+    (document.getElementById('cve-status-filter')?.value || '') !== '' ||
+    (document.getElementById('cve-pkg-search')?.value || '') !== '';
+  let critCount = 0, highCount = 0, medCount = 0, lowCount = 0;
+  const uniqueCVEs = new Set();
+  const uniquePkgs = new Set();
+  if (!hasFilter && S.scan && S.scan.scores) {
+    // Use the real totals from Trivy (not limited by topCVEs sample)
+    S.scan.scores.forEach(s => {
+      critCount += s.vulns.critical || 0;
+      highCount += s.vulns.high || 0;
+      medCount += s.vulns.medium || 0;
+      lowCount += s.vulns.low || 0;
+    });
+  } else {
+    cveData.forEach(c => {
+      if (c.severity === 'CRITICAL') critCount++;
+      else if (c.severity === 'HIGH') highCount++;
+      else if (c.severity === 'MEDIUM') medCount++;
+      else lowCount++;
+    });
+  }
+  cveData.forEach(c => {
+    uniqueCVEs.add(c.id);
+    uniquePkgs.add(c.package);
+  });
+
+  document.getElementById('cve-stats').innerHTML = `
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">crisis_alert</span></div>
+      <div class="stat-label">Critical</div>
+      <div class="stat-value" style="color:var(--error-light)">${critCount}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">warning</span></div>
+      <div class="stat-label">High</div>
+      <div class="stat-value" style="color:var(--warning)">${highCount}</div>
+    </div>
+    <div class="stat-card accent-blue">
+      <div class="stat-icon blue"><span class="mi">info</span></div>
+      <div class="stat-label">Medium + Low</div>
+      <div class="stat-value" style="color:var(--primary-light)">${medCount + lowCount}</div>
+    </div>
+    <div class="stat-card accent-success">
+      <div class="stat-icon green"><span class="mi">fingerprint</span></div>
+      <div class="stat-label">Unique CVEs / Packages</div>
+      <div class="stat-value" style="font-size:20px">${uniqueCVEs.size}<span class="stat-sub"> / ${uniquePkgs.size}</span></div>
+    </div>`;
+
+  // Table
+  const start = cvePage * CVE_PAGE_SIZE;
+  const pageRows = cveData.slice(start, start + CVE_PAGE_SIZE);
+  const totalPages = Math.ceil(cveData.length / CVE_PAGE_SIZE) || 1;
+
+  document.getElementById('cve-count-label').textContent = cveData.length.toLocaleString() + ' CVEs found';
+  document.getElementById('cve-table-title').textContent = 'All Vulnerabilities';
+
+  document.getElementById('cve-tbody').innerHTML = pageRows.length ? pageRows.map(c => {
+    const sevClass = c.severity === 'CRITICAL' ? 'sev-critical' : c.severity === 'HIGH' ? 'sev-high' : c.severity === 'MEDIUM' ? 'sev-medium' : 'sev-low';
+    const inUseTag = inUseBadge(c);
+    return `<tr>
+      <td><span class="${sevClass}" style="font-weight:600">${c.severity}</span></td>
+      <td style="font-weight:600">${c.cvss.toFixed(1)}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(c.id)}</td>
+      <td>${esc(c.package)}</td>
+      <td style="font-size:11px;color:var(--text-secondary);font-family:monospace">${esc(c.installedVersion || '-')}</td>
+      <td style="font-size:11px;color:${c.fixedVersion ? 'var(--success)' : 'var(--text-disabled)'};font-family:monospace">${c.fixedVersion || 'No fix'}</td>
+      <td style="font-size:11px">${esc(c.namespace)}</td>
+      <td style="font-size:11px">${esc(shortPod(c.podName))}</td>
+      <td>${inUseTag}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" style="color:var(--text-secondary);text-align:center;padding:24px">No CVEs match the current filters</td></tr>';
+
+  document.getElementById('cve-page-info').textContent = `Page ${cvePage + 1} of ${totalPages} (${cveData.length.toLocaleString()} total)`;
+  document.getElementById('cve-prev-btn').disabled = cvePage === 0;
+  document.getElementById('cve-next-btn').disabled = (cvePage + 1) * CVE_PAGE_SIZE >= cveData.length;
+
+  // Update sidebar badge
+  const totalCVEs = S.scan ? S.scan.scores.reduce((sum, s) => sum + (s.vulns.totalCount || 0), 0) : 0;
+  document.getElementById('badge-total-cves').textContent = totalCVEs > 999 ? Math.round(totalCVEs / 1000) + 'k' : totalCVEs;
+}
+
+function exportCVEsCSV() {
+  if (!cveData.length) return;
+  let csv = 'Severity,CVSS,CVE ID,Package,Installed Version,Fixed Version,Namespace,Pod,Image,In Use,Confidence\n';
+  cveData.forEach(c => {
+    csv += [c.severity, c.cvss, c.id, '"' + (c.package||'') + '"', '"' + (c.installedVersion||'') + '"',
+      '"' + (c.fixedVersion||'') + '"', c.namespace, c.podName, '"' + (c.imageName||'') + '"',
+      c.inUse, c.confidence || 0].join(',') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'plexar-cves.csv';
+  a.click();
 }
 
 // ═══════════════════════════════════════

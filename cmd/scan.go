@@ -47,6 +47,7 @@ func resolveNamespaces() ([]string, error) {
 var (
 	outputFormat   string
 	vulnSource     string
+	imageSource    string
 	freshScan      bool
 	scanVantaToken string
 	scanDrataKey   string
@@ -63,6 +64,12 @@ Vulnerability sources:
   trivy-operator     — reads existing Trivy Operator VulnerabilityReport CRDs
   none               — skip CVE scanning, score on blast radius + permissions only
 
+Image sources (--image-source, used with --vuln-source trivy):
+  auto (default)     — detect runtime (CRI-O, containerd, Docker)
+  crio               — export from CRI-O via skopeo, scan tarball
+  containerd         — Trivy native containerd support
+  docker             — Trivy native Docker support
+
 Output formats:
   table (default) — colorized CLI table
   json            — full scan result as JSON
@@ -76,6 +83,7 @@ func init() {
 	rootCmd.AddCommand(scanCmd)
 	scanCmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json, csv, sarif")
 	scanCmd.Flags().StringVar(&vulnSource, "vuln-source", "trivy", "Vulnerability source: trivy, trivy-operator, none")
+	scanCmd.Flags().StringVar(&imageSource, "image-source", "auto", "Image source: auto, crio, containerd, docker")
 	scanCmd.Flags().BoolVar(&freshScan, "fresh", false, "Force re-scan images (ignore cache)")
 	scanCmd.Flags().StringVar(&scanVantaToken, "vanta-token", "", "Vanta API token — push evidence after scan")
 	scanCmd.Flags().StringVar(&scanDrataKey, "drata-key", "", "Drata API key — push evidence after scan")
@@ -89,7 +97,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Configure vulnerability source with progress and cache options
-	opts := scanner.SourceOptions{Fresh: freshScan}
+	opts := scanner.SourceOptions{Fresh: freshScan, ImageSource: imageSource}
 	if progress != nil {
 		opts.Progress = progress
 	}
@@ -105,10 +113,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Preflight checks (skip Trivy checks when vuln-source=none)
+	// Preflight checks (skip entirely when vuln-source=none)
 	if vulnSource != "none" {
 		for _, ns := range namespaces {
-			if err := preflight.Run(kubeconfig, ns); err != nil {
+			if err := preflight.Run(kubeconfig, ns, vulnSource, imageSource); err != nil {
 				return err
 			}
 		}
