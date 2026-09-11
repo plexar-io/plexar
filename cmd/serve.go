@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -42,6 +43,7 @@ var (
 	evidenceSinks   []string
 	hubbleRelayAddr string
 	serveVulnSource string
+	loadFile        string
 )
 
 var serveCmd = &cobra.Command{
@@ -67,6 +69,7 @@ func init() {
 	serveCmd.Flags().StringSliceVar(&evidenceSinks, "evidence-sink", nil, "Evidence sink DSN(s): s3://key:secret@host/bucket or webhook://url")
 	serveCmd.Flags().StringVar(&hubbleRelayAddr, "hubble-relay", "", "Hubble Relay address (host:port); auto-detect if empty")
 	serveCmd.Flags().StringVar(&serveVulnSource, "vuln-source", "trivy", "Vulnerability source: trivy, trivy-operator, none")
+	serveCmd.Flags().StringVar(&loadFile, "load", "", "Load scan results from a JSON file (skip live scanning)")
 }
 
 // Scan cache — background loop writes, API handlers read
@@ -298,6 +301,95 @@ func runServe(cmd *cobra.Command, args []string) error {
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment; filename=plexar-scan.csv")
 		reporter.ExportCSV(w, result)
+	})
+
+	// CVE Explorer — returns ALL CVEs across all pods with optional filtering
+	mux.HandleFunc("/api/cves", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"cves": []interface{}{}, "total": 0})
+			return
+		}
+
+		// Query params for filtering
+		nsFilter := r.URL.Query().Get("namespace")
+		podFilter := r.URL.Query().Get("pod")
+		sevFilter := strings.ToUpper(r.URL.Query().Get("severity"))
+		pkgFilter := strings.ToLower(r.URL.Query().Get("package"))
+		inUseFilter := r.URL.Query().Get("inuse") // "true" or "false"
+
+		type CVERow struct {
+			PodName    string  `json:"podName"`
+			Namespace  string  `json:"namespace"`
+			ImageName  string  `json:"imageName"`
+			ID         string  `json:"id"`
+			Severity   string  `json:"severity"`
+			CVSS       float64 `json:"cvss"`
+			Package    string  `json:"package"`
+			Installed  string  `json:"installedVersion"`
+			Fixed      string  `json:"fixedVersion"`
+			InUse      bool    `json:"inUse"`
+			Confidence float64 `json:"confidence"`
+			Published  string  `json:"publishedDate"`
+		}
+
+		var rows []CVERow
+		for _, score := range result.Scores {
+			if nsFilter != "" && score.Namespace != nsFilter {
+				continue
+			}
+			if podFilter != "" && score.PodName != podFilter {
+				continue
+			}
+			// Use AllCVEs if available, fall back to TopCVEs
+			cves := score.Vulns.AllCVEs
+			if len(cves) == 0 {
+				cves = score.Vulns.TopCVEs
+			}
+			for _, c := range cves {
+				if sevFilter != "" && c.Severity != sevFilter {
+					continue
+				}
+				if pkgFilter != "" && !strings.Contains(strings.ToLower(c.Package), pkgFilter) {
+					continue
+				}
+				if inUseFilter == "true" && !c.InUse {
+					continue
+				}
+				if inUseFilter == "false" && c.InUse {
+					continue
+				}
+				rows = append(rows, CVERow{
+					PodName:    score.PodName,
+					Namespace:  score.Namespace,
+					ImageName:  score.ImageName,
+					ID:         c.ID,
+					Severity:   c.Severity,
+					CVSS:       c.CVSS,
+					Package:    c.Package,
+					Installed:  c.InstalledVersion,
+					Fixed:      c.FixedVersion,
+					InUse:      c.InUse,
+					Confidence: c.Confidence,
+					Published:  c.PublishedDate,
+				})
+			}
+		}
+
+		// Sort by CVSS desc
+		sort.Slice(rows, func(i, j int) bool {
+			if rows[i].Severity != rows[j].Severity {
+				sevOrder := map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+				return sevOrder[rows[i].Severity] < sevOrder[rows[j].Severity]
+			}
+			return rows[i].CVSS > rows[j].CVSS
+		})
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"cves":  rows,
+			"total": len(rows),
+		})
 	})
 
 	mux.HandleFunc("/api/settings/weights", func(w http.ResponseWriter, r *http.Request) {
@@ -641,11 +733,43 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	go func() {
-		// Initial scan on startup
-		doScan("Initial scan")
+		// Load from file or run initial scan
+		if loadFile != "" {
+			data, err := os.ReadFile(loadFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "⚠  Failed to load %s: %v\n", loadFile, err)
+			} else {
+				var result types.ScanResult
+				if err := json.Unmarshal(data, &result); err != nil {
+					fmt.Fprintf(os.Stderr, "⚠  Failed to parse %s: %v\n", loadFile, err)
+				} else {
+					setCachedResult(&result)
+					setLastScanTime(result.ScanTime)
+					_ = store.Save(&result)
+					vault.Record(&result)
+					metricsCollector.Update(&result)
+
+					// Recompute attack paths from loaded data
+					apSummary := api.RecomputeAttackPaths(&result)
+					fmt.Fprintf(os.Stderr, "📂 Loaded scan from %s — cluster score: %d, %d pods\n", loadFile, result.ClusterScore, result.TotalPods)
+					fmt.Fprintf(os.Stderr, "🗺  Attack paths: %d total (%d critical)\n", apSummary.TotalPaths, apSummary.CriticalPaths)
+					if apSummary.ChainSummary != nil && apSummary.ChainSummary.TotalChains > 0 {
+						fmt.Fprintf(os.Stderr, "⛓  Exploit chains: %d total (%d critical)\n", apSummary.ChainSummary.TotalChains, apSummary.ChainSummary.CriticalChains)
+					}
+				}
+			}
+		} else {
+			doScan("Initial scan")
+		}
 		// Seed demo history from first result
 		if r := getCachedResult(); r != nil {
 			_ = store.SeedDemo(r)
+		}
+
+		if loadFile != "" {
+			// Static mode — no background rescans
+			<-ctx.Done()
+			return
 		}
 
 		ticker := time.NewTicker(scanInterval)

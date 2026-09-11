@@ -8,6 +8,7 @@ import (
 	"github.com/plexar-io/plexar/internal/types"
 	"github.com/plexar-io/plexar/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -43,10 +44,10 @@ func (a *Analyzer) AnalyzeNamespace(ctx context.Context, namespace string) ([]ty
 		}
 	}
 
-	// List NetworkPolicies
+	// List NetworkPolicies (non-fatal: some RBAC configs deny this)
 	netpols, err := a.client.Clientset.NetworkingV1().NetworkPolicies(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list NetworkPolicies: %w", err)
+		netpols = &networkingv1.NetworkPolicyList{} // treat as zero policies
 	}
 	netPolCount := len(netpols.Items)
 
@@ -263,10 +264,10 @@ func (a *Analyzer) AnalyzeNamespaceWithFlows(ctx context.Context, namespace stri
 		return nil, 0, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// NetworkPolicy count (still needed for scoring)
+	// NetworkPolicy count (non-fatal: some RBAC configs deny this)
 	netpols, err := a.client.Clientset.NetworkingV1().NetworkPolicies(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list NetworkPolicies: %w", err)
+		netpols = &networkingv1.NetworkPolicyList{}
 	}
 	netPolCount := len(netpols.Items)
 

@@ -3,10 +3,13 @@ package preflight
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/plexar-io/plexar/pkg/k8s"
+	"github.com/plexar-io/plexar/pkg/scanner"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -15,12 +18,23 @@ import (
 type CheckResult struct {
 	Name    string
 	Passed  bool
+	Warning bool // non-fatal: printed as a warning, does not block the scan
 	Message string
 }
 
 // Run executes all preflight checks and returns any failures as a user-friendly error.
 // Returns nil if all checks pass.
-func Run(kubeconfig, namespace string) error {
+//
+// opts[0] = vuln source (trivy, trivy-operator, none); opts[1] = image source
+// (auto, crio, containerd, docker).
+func Run(kubeconfig, namespace string, opts ...string) error {
+	vulnSrc, imageSrc := "", ""
+	if len(opts) > 0 {
+		vulnSrc = opts[0]
+	}
+	if len(opts) > 1 {
+		imageSrc = opts[1]
+	}
 	client, err := k8s.NewClient(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("cannot connect to Kubernetes cluster.\n\n  Possible causes:\n  • No kubeconfig found (checked ~/.kube/config)\n  • Cluster is unreachable\n  • Context is invalid\n\n  Fix: ensure kubectl get nodes works, then retry.\n\n  Original error: %w", err)
@@ -37,24 +51,42 @@ func Run(kubeconfig, namespace string) error {
 		failures = append(failures, nsCheck)
 	}
 
-	// Check 2: Trivy Operator CRDs installed
-	trivyCheck := checkTrivyOperator(ctx, client)
-	if !trivyCheck.Passed {
-		failures = append(failures, trivyCheck)
-	}
+	// Check 2+3: Trivy Operator CRDs (only for trivy-operator source)
+	if vulnSrc == "trivy-operator" || vulnSrc == "" {
+		trivyCheck := checkTrivyOperator(ctx, client)
+		if !trivyCheck.Passed {
+			failures = append(failures, trivyCheck)
+		}
 
-	// Check 3: VulnerabilityReports exist in namespace
-	if trivyCheck.Passed {
-		vulnCheck := checkVulnReports(ctx, client, namespace)
-		if !vulnCheck.Passed {
-			failures = append(failures, vulnCheck)
+		if trivyCheck.Passed {
+			vulnCheck := checkVulnReports(ctx, client, namespace)
+			if !vulnCheck.Passed {
+				failures = append(failures, vulnCheck)
+			}
 		}
 	}
 
-	// Check 4: RBAC permissions to read required resources
+	// Check: Trivy subprocess tooling — only for the default binary source.
+	// Catches the air-gapped/CRI-O gotchas (missing trivy, stale/absent offline
+	// DB, missing crictl/skopeo) that otherwise surface as silent empty results.
+	if vulnSrc == "trivy" {
+		for _, c := range checkTrivyTooling(imageSrc) {
+			if c.Passed {
+				continue
+			}
+			if c.Warning {
+				fmt.Fprintf(os.Stderr, "  ⚠  %s\n", c.Message)
+			} else {
+				failures = append(failures, c)
+			}
+		}
+	}
+
+	// Check 4: RBAC permissions to read required resources (warning only —
+	// the scan degrades gracefully when NetworkPolicies/RBAC are inaccessible)
 	rbacCheck := checkRBACPermissions(ctx, client, namespace)
 	if !rbacCheck.Passed {
-		failures = append(failures, rbacCheck)
+		fmt.Fprintf(os.Stderr, "  ⚠  %s (will scan with reduced data)\n", rbacCheck.Message)
 	}
 
 	if len(failures) == 0 {
@@ -79,17 +111,13 @@ func checkNamespace(ctx context.Context, client *k8s.Client, namespace string) C
 		return result
 	}
 
-	pods, err := client.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{Limit: 1})
+	_, err = client.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{Limit: 1})
 	if err != nil {
 		result.Message = fmt.Sprintf("Cannot list pods in namespace '%s'. Check RBAC permissions.", namespace)
 		return result
 	}
 
-	if len(pods.Items) == 0 {
-		result.Message = fmt.Sprintf("Namespace '%s' has no pods. Deploy workloads first, then scan.", namespace)
-		return result
-	}
-
+	// Empty namespaces are fine — the scan will just produce empty results
 	result.Passed = true
 	return result
 }
@@ -135,6 +163,96 @@ func checkVulnReports(ctx context.Context, client *k8s.Client, namespace string)
 
 	result.Passed = true
 	return result
+}
+
+// checkTrivyTooling validates the local environment for the trivy binary scan
+// path: the binary itself, an offline-usable vulnerability DB, and (for CRI-O
+// nodes) the crictl/skopeo tools needed to export images. Returns a mix of
+// hard failures and non-fatal warnings.
+func checkTrivyTooling(imageSrc string) []CheckResult {
+	var results []CheckResult
+
+	// 1. Trivy binary
+	trivyPath, err := scanner.FindTrivy()
+	if err != nil {
+		results = append(results, CheckResult{
+			Name:    "Trivy binary",
+			Message: "trivy binary not found.\n     Fix: install trivy, or set TRIVY_PATH=/path/to/trivy\n     Air-gapped: copy the trivy binary onto this host and export TRIVY_PATH.",
+		})
+		return results // nothing else is meaningful without trivy
+	}
+	results = append(results, CheckResult{Name: "Trivy binary", Passed: true, Message: "found at " + trivyPath})
+
+	// 2. Trivy vulnerability DB (offline-safe presence + freshness)
+	dbPath, updatedAt, dberr := scanner.TrivyDBInfo()
+	if dberr != nil {
+		results = append(results, CheckResult{
+			Name:    "Trivy vulnerability DB",
+			Message: fmt.Sprintf("Trivy DB %v.\n     The CRI-O/air-gapped scan path uses --offline-scan and will NOT auto-download it — scans would return no CVEs.\n     Fix: on an internet-connected host run 'trivy image --download-db-only',\n     then copy ~/.cache/trivy to this host (or point TRIVY_CACHE_DIR at it).", dberr),
+		})
+	} else if age := time.Since(updatedAt); age > 14*24*time.Hour {
+		results = append(results, CheckResult{
+			Name:    "Trivy vulnerability DB",
+			Warning: true,
+			Message: fmt.Sprintf("Trivy DB is %d days old (%s) — results may miss recent CVEs. Refresh with 'trivy image --download-db-only'.", int(age.Hours()/24), dbPath),
+		})
+	} else {
+		results = append(results, CheckResult{Name: "Trivy vulnerability DB", Passed: true})
+	}
+
+	// 3. Image runtime / CRI-O tooling
+	detected := imageSrc
+	if detected == "" || detected == scanner.ImageSourceAuto {
+		detected = scanner.DetectImageSource()
+	}
+	switch detected {
+	case scanner.ImageSourceCRIO:
+		if missing := missingTools("crictl", "skopeo"); len(missing) > 0 {
+			results = append(results, CheckResult{
+				Name:    "CRI-O tooling",
+				Message: fmt.Sprintf("CRI-O runtime selected but missing required tool(s): %s.\n     These export container images from CRI-O storage for scanning.\n     Fix: install %s on this node.", strings.Join(missing, ", "), strings.Join(missing, ", ")),
+			})
+		} else {
+			results = append(results, CheckResult{Name: "CRI-O tooling", Passed: true, Message: "crictl + skopeo present"})
+		}
+	case scanner.ImageSourceContainerd, scanner.ImageSourceDocker:
+		results = append(results, CheckResult{Name: "Container runtime", Passed: true, Message: detected + " detected"})
+	default:
+		// Auto-detect found no runtime. If we're sitting on a CRI-O node, the
+		// most likely cause is missing crictl/skopeo — surface that as a hard
+		// failure rather than a vague warning.
+		if _, statErr := os.Stat("/run/crio/crio.sock"); statErr == nil {
+			missing := missingTools("crictl", "skopeo")
+			results = append(results, CheckResult{
+				Name:    "CRI-O tooling",
+				Message: fmt.Sprintf("CRI-O socket found at /run/crio/crio.sock but tool(s) missing: %s.\n     Install them and re-run with --image-source crio.", strings.Join(missing, ", ")),
+			})
+		} else if imageSrc != "" && imageSrc != scanner.ImageSourceAuto {
+			results = append(results, CheckResult{
+				Name:    "Container runtime",
+				Message: fmt.Sprintf("--image-source=%s requested but its runtime was not detected on this host.\n     Run Plexar on a cluster node, or omit --image-source to let Trivy pull images from the registry.", imageSrc),
+			})
+		} else {
+			results = append(results, CheckResult{
+				Name:    "Container runtime",
+				Warning: true,
+				Message: "No local container runtime detected (CRI-O/containerd/docker). Trivy will pull images from the registry — ensure this host can reach it, or run Plexar on a node for local image export.",
+			})
+		}
+	}
+
+	return results
+}
+
+// missingTools returns the subset of the given binaries not found in PATH.
+func missingTools(tools ...string) []string {
+	var missing []string
+	for _, t := range tools {
+		if _, err := exec.LookPath(t); err != nil {
+			missing = append(missing, t)
+		}
+	}
+	return missing
 }
 
 func checkRBACPermissions(ctx context.Context, client *k8s.Client, namespace string) CheckResult {

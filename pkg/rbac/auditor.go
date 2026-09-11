@@ -29,25 +29,25 @@ func (a *Auditor) AuditNamespace(ctx context.Context, namespace string) (*types.
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// Load all RBAC resources
+	// Load all RBAC resources (non-fatal: some RBAC configs deny access to these)
 	roleBindings, err := a.client.Clientset.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list RoleBindings: %w", err)
+		roleBindings = &rbacv1.RoleBindingList{}
 	}
 
 	clusterRoleBindings, err := a.client.Clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list ClusterRoleBindings: %w", err)
+		clusterRoleBindings = &rbacv1.ClusterRoleBindingList{}
 	}
 
 	roles, err := a.client.Clientset.RbacV1().Roles(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list Roles: %w", err)
+		roles = &rbacv1.RoleList{}
 	}
 
 	clusterRoles, err := a.client.Clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list ClusterRoles: %w", err)
+		clusterRoles = &rbacv1.ClusterRoleList{}
 	}
 
 	// Index roles by name for fast lookup
