@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/plexar-io/plexar/pkg/k8s"
 	"github.com/plexar-io/plexar/pkg/scorer"
 	"github.com/spf13/cobra"
 )
 
 var (
-	kubeconfig    string
-	namespace     string
-	allNamespaces bool
-	weightsFile   string
+	kubeconfig       string
+	namespace        string
+	allNamespaces    bool
+	weightsFile      string
+	kubectlTransport bool
 )
 
 var rootCmd = &cobra.Command{
@@ -27,6 +29,11 @@ risk to your cluster — and generates audit-ready compliance evidence.
 Unlike traditional scanners that just list CVEs, Plexar shows the blast radius,
 tags CVEs as "in use" at runtime, and maps findings to SOC 2, PCI DSS, EU CRA,
 and more.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if kubectlTransport {
+			k8s.UseKubectlTransport = true
+		}
+	},
 }
 
 func Execute() error {
@@ -43,6 +50,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "default", "Target namespace(s) — comma-separated or 'all'")
 	rootCmd.PersistentFlags().BoolVarP(&allNamespaces, "all-namespaces", "A", false, "Scan all namespaces in the cluster")
 	rootCmd.PersistentFlags().StringVar(&weightsFile, "weights", "", "Path to custom scoring weights JSON file")
+	rootCmd.PersistentFlags().BoolVar(&kubectlTransport, "kubectl-transport", false, "Route API calls through kubectl binary (for restricted environments)")
 
 	if ns := os.Getenv("PLEXAR_NAMESPACE"); ns != "" && namespace == "default" {
 		namespace = ns

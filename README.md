@@ -76,7 +76,7 @@ helm install plexar plexar/plexar --namespace plexar-system --create-namespace
 
 # From source
 git clone https://github.com/plexar-io/plexar.git
-cd plexar && go build -o reflex .
+cd plexar && go build -o plexar .
 ```
 
 ### Try the demo (5 minutes)
@@ -262,23 +262,24 @@ Automatic classification of **19 workload types** with risk multipliers:
 | Model Registry   |   ×1.40    |     |                |            |
 | ML / AI Workload |   ×1.35    |     |                |            |
 
-### Web Dashboard (11 pages)
+### Web Dashboard (12 pages)
 
 Embedded in the binary — no separate frontend build. Served at `http://localhost:8080`.
 
-| Page                 | Description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| **Dashboard**        | Cluster risk score, pod counts, CVE stats, compliance sparkline |
-| **Topology**         | Interactive blast radius map with network lines                 |
-| **Pods**             | Full pod table with class, multiplier, CVEs, reachability       |
-| **Compliance**       | Tabbed framework view with scores, findings, remediation        |
-| **RBAC Audit**       | Cluster-admin, wildcard, exec, secret flags with filtering      |
-| **Evidence Vault**   | Hash chain integrity, drift timeline, control pass rates        |
-| **Integrations**     | Vanta/Drata provider cards and push history                     |
-| **Alerts**           | Alert rules, destinations, recent events                        |
-| **Runtime Insights** | In Use vs Dormant CVEs, per-pod charts, confidence scores       |
-| **Attack Paths**     | Path visualization with node chains, edge details, remediation  |
-| **Settings**         | Scoring weights, scan configuration                             |
+| Page                 | Description                                                             |
+| -------------------- | ----------------------------------------------------------------------- |
+| **Dashboard**        | Cluster risk score, pod counts, CVE stats, In Use toggle, noise banner  |
+| **Topology**         | Interactive blast radius map with network lines                         |
+| **Pods**             | Full pod table with class, multiplier, CVEs, reachability               |
+| **CVE Explorer**     | Browse all CVEs with namespace/severity/package/in-use filters, export  |
+| **Compliance**       | Tabbed framework view with scores, findings, remediation                |
+| **RBAC Audit**       | Cluster-admin, wildcard, exec, secret flags with filtering              |
+| **Evidence Vault**   | Hash chain integrity, drift timeline, control pass rates                |
+| **Integrations**     | Vanta/Drata provider cards and push history                             |
+| **Alerts**           | Alert rules, destinations, recent events                                |
+| **Runtime Insights** | In Use vs Dormant CVEs, per-pod charts, confidence scores               |
+| **Attack Paths**     | Path visualization with node chains, edge details, remediation          |
+| **Settings**         | Scoring weights, scan configuration                                     |
 
 ---
 
@@ -398,6 +399,7 @@ All endpoints available when running `◈ plexar serve`:
 | Endpoint                          | Method | Description                                                   |
 | --------------------------------- | :----: | ------------------------------------------------------------- |
 | `/api/scan`                       |  GET   | Run scan, return full results                                 |
+| `/api/cves`                       |  GET   | All CVEs with filters: namespace, severity, package, inuse    |
 | `/api/compliance`                 |  GET   | All compliance framework results                              |
 | `/api/compliance/framework?name=` |  GET   | Single framework (soc2, eu-cra, pci-dss, hipaa, cis)          |
 | `/api/ingest?source=`             |  POST  | Ingest external scanner data (kubescape, kyverno, trivy-sbom) |
@@ -457,7 +459,7 @@ All endpoints available when running `◈ plexar serve`:
 ## ◈ Project Structure
 
 ```
-reflex/
+plexar/
 ├── cmd/                          # CLI commands
 │   ├── root.go                   # Global flags, kubeconfig, namespace
 │   ├── scan.go                   # ◈ plexar scan — one-shot scan + PDF
@@ -531,6 +533,249 @@ reflex/
 - **Kubernetes cluster** — or use `./demo/setup.sh` to create one with kind
 - **kubectl** — configured with cluster access
 - **Trivy** _(optional)_ — for CVE scanning. Not required with `--vuln-source trivy-operator` or `--vuln-source none`
+- **skopeo** _(optional)_ — required only for CRI-O based clusters (auto-detected)
+
+---
+
+## ◈ Building from Source
+
+### Local (macOS/Linux)
+
+```bash
+git clone https://github.com/plexar-io/plexar.git
+cd plexar
+go build -o plexar .
+```
+
+### Cross-compile for a remote Linux server
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/plexar-linux .
+```
+
+The binary is fully self-contained — the dashboard, all templates, and static assets are embedded. No external files needed.
+
+---
+
+## ◈ Scanning Restricted Clusters (CRI-O / Nexus Dashboard)
+
+Standard Kubernetes clusters use Docker or containerd where Trivy can pull images directly. Some environments (Cisco NDFC, OpenShift, etc.) use **CRI-O** where images aren't available via `docker pull`. Plexar handles this automatically.
+
+### How it works
+
+1. Plexar auto-detects CRI-O by checking the container runtime on nodes
+2. Uses `skopeo` to export images from CRI-O's local storage
+3. Feeds the exported tar to Trivy for scanning
+
+### Requirements
+
+On the node where you run plexar:
+
+```bash
+# Install skopeo (if not already present)
+# RHEL/CentOS
+yum install -y skopeo
+
+# Ubuntu/Debian
+apt-get install -y skopeo
+```
+
+### Usage
+
+```bash
+# Auto-detect (recommended) — detects CRI-O automatically
+sudo plexar scan -n cisco-ndfc
+
+# Explicit CRI-O mode
+sudo plexar scan -n cisco-ndfc --image-source crio
+
+# Force Docker Hub mode (skip CRI-O detection)
+sudo plexar scan -n cisco-ndfc --image-source docker
+```
+
+> **Note:** `sudo` is required for CRI-O scanning (access to container storage) and runtime profiling (access to `/proc`).
+
+### Saving scan results
+
+```bash
+sudo plexar scan -n cisco-ndfc -o json > plexar-scan.json
+```
+
+This JSON file contains all pod scores, CVEs, blast radius, RBAC findings, compliance results, and attack paths. It can be loaded into the dashboard later without needing cluster access.
+
+---
+
+## ◈ Dashboard Deployment
+
+The web dashboard is embedded in the binary. There are several ways to run it depending on your environment.
+
+### Option 1: Local viewing (easiest)
+
+View scan results on your own machine. No cluster access needed.
+
+```bash
+# Run the scan on the cluster, save results
+sudo plexar scan -n production -o json > plexar-scan.json
+
+# View the dashboard locally
+./plexar serve --load plexar-scan.json -p 8080
+# Open http://localhost:8080
+```
+
+### Option 2: Live operator mode
+
+Continuous scanning with automatic refresh:
+
+```bash
+plexar serve -n production --scan-interval 5m -p 8080
+```
+
+### Option 3: Remote server for team access
+
+Deploy on a server your team can reach. This is the recommended approach for sharing the dashboard.
+
+**Step 1:** Build and copy to the server
+
+```bash
+# Cross-compile
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/plexar-linux .
+
+# Copy binary and scan data
+scp bin/plexar-linux user@server:~/plexar
+scp plexar-scan.json user@server:~/plexar-scan.json
+```
+
+**Step 2:** Run on the server
+
+```bash
+ssh user@server
+
+# Run in background (survives disconnect)
+nohup ~/plexar serve --load ~/plexar-scan.json -p 7777 --metrics-port 7778 \
+  > ~/plexar.log 2>&1 &
+
+# Verify it's running
+curl -s http://localhost:7777/api/meta
+```
+
+> **Important:** Use `nohup` or `tmux` to keep plexar running after you disconnect. Without it, the process dies when your SSH session closes.
+
+**Step 3:** Open the firewall port
+
+Most servers have a default DROP policy on INPUT. You need to allow the dashboard port:
+
+```bash
+# Check current policy
+sudo iptables -L INPUT -n | head -3
+
+# If policy is DROP, allow the dashboard port
+sudo iptables -I INPUT 1 -p tcp --dport 7777 -j ACCEPT
+
+# Verify the rule is in place
+sudo iptables -L INPUT -n --line-numbers | head -5
+```
+
+**Step 4:** Access from any browser
+
+```
+http://<server-ip>:7777
+```
+
+Share this URL with your team. No client-side setup needed.
+
+**Cleanup:** Remove the firewall rule when done:
+
+```bash
+sudo iptables -D INPUT -p tcp --dport 7777 -j ACCEPT
+```
+
+> **Note:** iptables rules don't survive reboots unless explicitly saved. This is a feature for temporary dashboard sharing.
+
+### Troubleshooting remote deployment
+
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| `bind: address already in use` | Port already taken | Use a different port: `-p 7777` |
+| Dashboard loads but no data | Scan file path wrong | Use absolute path: `--load /full/path/to/scan.json` |
+| `~/file` not found (as root) | `~` resolves to `/root/` | Use absolute path instead |
+| Chrome spins forever | Firewall blocking | Add iptables rule (see above) |
+| SSH tunnel hangs | Appliance network isolation | SSH daemons on some appliances (NDFC, etc.) run in restricted network namespaces; use iptables direct access instead |
+| `nohup: command not found` | Minimal container OS | Use `tmux` or `screen` instead |
+| Process dies on disconnect | Forgot `nohup` / `tmux` | Prefix with `nohup ... &` |
+
+### SSH port forwarding (alternative to iptables)
+
+If you can't modify firewall rules, SSH tunneling works on standard Linux servers:
+
+```bash
+# From your laptop — maps local port 8080 to remote port 7777
+ssh -N -L 8080:localhost:7777 user@server
+# Then open http://localhost:8080
+
+# If localhost doesn't work (containerized SSH daemons), try the server's IP:
+ssh -N -L 8080:<server-ip>:7777 user@server
+```
+
+> **Warning:** On appliance platforms (Cisco NDFC, etc.), the SSH daemon may run in an isolated network namespace where `localhost` doesn't reach host-network services. In this case, SSH tunneling won't work — use the iptables approach instead.
+
+---
+
+## ◈ CVE Explorer
+
+The dashboard includes a full **CVE Explorer** page for browsing all vulnerabilities across namespaces and pods.
+
+### Features
+
+- **Filter by namespace, severity, package name, In Use status**
+- **Sortable columns** — click any header to sort by CVSS, severity, pod, etc.
+- **Pagination** — handles thousands of CVEs efficiently
+- **CSV export** — download filtered results for spreadsheets or ticketing
+- **In Use / Dormant badges** — shows which CVEs are loaded in memory at runtime
+
+### API
+
+```bash
+# All CVEs
+curl http://localhost:8080/api/cves
+
+# Filter by namespace
+curl http://localhost:8080/api/cves?namespace=production
+
+# Filter by severity
+curl http://localhost:8080/api/cves?severity=CRITICAL
+
+# Only in-use CVEs
+curl http://localhost:8080/api/cves?inuse=true
+
+# Search by package
+curl http://localhost:8080/api/cves?package=openssl
+
+# Combine filters
+curl "http://localhost:8080/api/cves?namespace=production&severity=CRITICAL&inuse=true"
+```
+
+---
+
+## ◈ Runtime In Use Filtering
+
+The dashboard includes an **In Use Only** toggle in the top-right corner of the Dashboard page. When enabled:
+
+- **Stat cards** show only in-use CVE counts
+- **Pod tables** show filtered critical/high counts
+- **Topology CVE panel** shows IN USE / DORMANT badges
+- **Noise reduction banner** shows the percentage of CVEs eliminated
+
+### How runtime profiling works
+
+```bash
+# Run with sudo for /proc access
+sudo plexar scan -n production -o json > scan-with-runtime.json
+
+# View in dashboard — In Use toggle will show real filtering
+./plexar serve --load scan-with-runtime.json
+```
+
+Without `sudo`, all CVEs default to "in use" (conservative mode, confidence 0.5). With `sudo`, Plexar reads `/proc/<pid>/maps` to identify actually loaded packages, typically achieving **90-96% noise reduction**.
 
 ---
 

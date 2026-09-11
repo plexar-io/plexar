@@ -1,7 +1,9 @@
 # Binaries
 plexar
+plexar-linux
 reflex
 *.exe
+bin/
 
 # Generated reports
 *.pdf

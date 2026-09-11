@@ -71,7 +71,7 @@ var knownCVETypes = map[string]string{
 	// Spring4Shell — RCE
 	"CVE-2022-22965": ExploitRCE,
 	// Apache Struts — RCE
-	"CVE-2017-5638":  ExploitRCE,
+	"CVE-2017-5638": ExploitRCE,
 	// ProxyShell / ProxyLogon — SSRF + RCE
 	"CVE-2021-26855": ExploitSSRF,
 	"CVE-2021-27065": ExploitRCE,
@@ -79,15 +79,15 @@ var knownCVETypes = map[string]string{
 	"CVE-2019-12384": ExploitDeserialization,
 	"CVE-2017-7525":  ExploitDeserialization,
 	// SnakeYAML deserialization
-	"CVE-2022-1471":  ExploitDeserialization,
+	"CVE-2022-1471": ExploitDeserialization,
 	// SQLi examples
-	"CVE-2019-3396":  ExploitPathTraversal,
+	"CVE-2019-3396": ExploitPathTraversal,
 	// ImageTragick — RCE
-	"CVE-2016-3714":  ExploitRCE,
+	"CVE-2016-3714": ExploitRCE,
 	// Heartbleed — info disclosure
-	"CVE-2014-0160":  ExploitInfoDisclosure,
+	"CVE-2014-0160": ExploitInfoDisclosure,
 	// Shellshock — RCE
-	"CVE-2014-6271":  ExploitRCE,
+	"CVE-2014-6271": ExploitRCE,
 	// Text4Shell — RCE
 	"CVE-2022-42889": ExploitRCE,
 	// curl SOCKS5 heap buffer overflow
@@ -96,30 +96,108 @@ var knownCVETypes = map[string]string{
 	"CVE-2023-34362": ExploitSQLi,
 }
 
-// ClassifyCVE determines the exploit type of a CVE based on its ID and description
+// ClassifyCVE determines the exploit type of a CVE based on its ID, package,
+// CVSS score, and description. When Trivy output lacks descriptions, we use
+// package-aware heuristics to infer likely exploit types.
 func ClassifyCVE(cve types.CVEInfo) string {
 	// Check known CVE mappings first
 	if t, ok := knownCVETypes[cve.ID]; ok {
 		return t
 	}
 
-	// Keyword match on description
+	// Keyword match on description (if available)
 	desc := strings.ToLower(cve.Description)
-	if desc == "" {
-		// Try the package name as a weak signal
-		desc = strings.ToLower(cve.Package)
-	}
-
-	if desc == "" {
-		return ExploitUnknown
-	}
-
-	for exploitType, keywords := range exploitTypeKeywords {
-		for _, kw := range keywords {
-			if strings.Contains(desc, kw) {
-				return exploitType
+	if desc != "" {
+		for exploitType, keywords := range exploitTypeKeywords {
+			for _, kw := range keywords {
+				if strings.Contains(desc, kw) {
+					return exploitType
+				}
 			}
 		}
+	}
+
+	// Package-aware heuristics when descriptions are unavailable
+	pkg := strings.ToLower(cve.Package)
+	if t := classifyByPackage(pkg, cve.CVSS); t != ExploitUnknown {
+		return t
+	}
+
+	// High-CVSS fallback: CVSS >= 9.5 with no other signal → likely RCE
+	if cve.CVSS >= 9.5 {
+		return ExploitRCE
+	}
+
+	return ExploitUnknown
+}
+
+// classifyByPackage infers exploit type from the package name and CVSS score.
+// This covers the common case where Trivy output lacks CVE descriptions.
+func classifyByPackage(pkg string, cvss float64) string {
+	// Go stdlib critical CVEs are almost always RCE (net/http, html/template, etc.)
+	if pkg == "stdlib" && cvss >= 9.0 {
+		return ExploitRCE
+	}
+
+	// Container runtime packages → container escape / RCE
+	for _, runtime := range []string{"runc", "containerd", "cri-o", "docker"} {
+		if strings.Contains(pkg, runtime) {
+			if cvss >= 7.0 {
+				return ExploitRCE
+			}
+		}
+	}
+
+	// Crypto/TLS libraries → auth bypass at high CVSS, info disclosure otherwise
+	for _, crypto := range []string{"openssl", "libssl", "libcrypto", "golang.org/x/crypto", "cryptography"} {
+		if strings.Contains(pkg, crypto) {
+			if cvss >= 9.0 {
+				return ExploitAuthBypass
+			}
+			if cvss >= 7.0 {
+				return ExploitInfoDisclosure
+			}
+		}
+	}
+
+	// Database drivers → SQLi
+	for _, db := range []string{"pgx", "mysql", "sqlite", "mongo-driver", "go-mssqldb"} {
+		if strings.Contains(pkg, db) && cvss >= 8.0 {
+			return ExploitSQLi
+		}
+	}
+
+	// Auth/identity packages → auth bypass
+	for _, auth := range []string{"auth", "oidc", "oauth", "jwt", "saml", "ldap", "kerberos"} {
+		if strings.Contains(pkg, auth) && cvss >= 7.0 {
+			return ExploitAuthBypass
+		}
+	}
+
+	// gRPC / HTTP frameworks → SSRF or RCE
+	for _, net := range []string{"grpc", "aiohttp", "requests", "urllib"} {
+		if strings.Contains(pkg, net) && cvss >= 8.0 {
+			return ExploitSSRF
+		}
+	}
+
+	// Serialization libraries → deserialization
+	for _, ser := range []string{"msgpack", "protobuf", "cbor", "yaml", "pickle", "jackson"} {
+		if strings.Contains(pkg, ser) && cvss >= 7.0 {
+			return ExploitDeserialization
+		}
+	}
+
+	// OpenAPI / API frameworks with high CVSS → auth bypass (validation bypass)
+	for _, api := range []string{"openapi", "kin-openapi", "swagger"} {
+		if strings.Contains(pkg, api) && cvss >= 8.0 {
+			return ExploitAuthBypass
+		}
+	}
+
+	// etcd → RCE (cluster state store)
+	if strings.Contains(pkg, "etcd") && cvss >= 8.0 {
+		return ExploitRCE
 	}
 
 	return ExploitUnknown

@@ -55,6 +55,56 @@ func LatestAttackPaths() *types.AttackPathSummary {
 	return latestAttackPath
 }
 
+// RecomputeAttackPaths rebuilds the attack graph and chain analysis from
+// an already-loaded ScanResult. Used by --load mode where RunScan is skipped.
+// Also recomputes runtime insights from the CVE inUse flags in the scan data.
+func RecomputeAttackPaths(result *types.ScanResult) *types.AttackPathSummary {
+	graph := attackpath.Build(result.Scores, result.RBACFindings)
+	summary := attackpath.Analyze(graph)
+
+	// Compute runtime insights from the loaded scan's inUse flags
+	totalCVEs := 0
+	inUseCVEs := 0
+	podInUseMap := make(map[string]int)
+	for _, s := range result.Scores {
+		cves := s.Vulns.AllCVEs
+		if len(cves) == 0 {
+			cves = s.Vulns.TopCVEs
+		}
+		totalCVEs += s.Vulns.TotalCount
+		inUseCount := 0
+		for _, c := range cves {
+			if c.InUse {
+				inUseCount++
+			}
+		}
+		// If we only have topCVEs (sample), extrapolate to totalCount
+		if len(s.Vulns.AllCVEs) == 0 && len(cves) > 0 && s.Vulns.TotalCount > len(cves) {
+			ratio := float64(inUseCount) / float64(len(cves))
+			inUseCount = int(ratio * float64(s.Vulns.TotalCount))
+		}
+		inUseCVEs += inUseCount
+		podInUseMap[s.PodName] = inUseCount
+	}
+	noiseReduction := 0.0
+	if totalCVEs > 0 {
+		noiseReduction = float64(totalCVEs-inUseCVEs) / float64(totalCVEs) * 100
+	}
+	insights := &types.RuntimeInsights{
+		TotalCVEs:      totalCVEs,
+		InUseCVEs:      inUseCVEs,
+		NoiseReduction: noiseReduction,
+		PodInUseMap:    podInUseMap,
+	}
+
+	insightsMu.Lock()
+	latestAttackPath = summary
+	latestInsights = insights
+	insightsMu.Unlock()
+
+	return summary
+}
+
 // RunMultiNamespaceScan scans multiple namespaces and merges the results.
 // Pass namespaces as a slice, or pass nil/empty to use the provided fallback.
 func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.Writer) (*types.ScanResult, error) {
@@ -233,7 +283,7 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		blasts, netPolCount, err = netAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("network analysis failed: %w", err)
+		fmt.Fprintf(progress, "   ⚠  Network analysis partial: %v\n", err)
 	}
 	fmt.Fprintf(progress, "   Found %d pods, %d NetworkPolicies (source: %s)\n", len(blasts), netPolCount, flowSource)
 
@@ -241,7 +291,7 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	permAnalyzer := permissions.New(client)
 	perms, err := permAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
 	if err != nil {
-		return nil, fmt.Errorf("permission analysis failed: %w", err)
+		fmt.Fprintf(progress, "   ⚠  Permission analysis skipped: %v\n", err)
 	}
 
 	fmt.Fprintf(progress, "� Auditing RBAC permissions...\n")
