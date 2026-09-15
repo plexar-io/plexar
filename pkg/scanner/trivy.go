@@ -46,7 +46,7 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 	// Verify trivy is available — check PATH, then common locations
 	trivyPath, err := findTrivy()
 	if err != nil {
-		return nil, fmt.Errorf("trivy binary not found in PATH. Install with: brew install trivy (or use --vuln-source trivy-operator / --vuln-source none)")
+		return nil, fmt.Errorf("trivy binary not found. Install: brew install trivy (macOS) or curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh (Linux). Or use --vuln-source=none to skip CVE scanning")
 	}
 
 	// List pods in namespace
@@ -285,12 +285,25 @@ func TrivyDBInfo() (dbPath string, updatedAt time.Time, err error) {
 		if herr != nil {
 			return "", time.Time{}, herr
 		}
-		cacheDir = filepath.Join(home, ".cache", "trivy")
+		// Check platform-specific paths: macOS uses ~/Library/Caches, Linux uses ~/.cache
+		candidates := []string{
+			filepath.Join(home, "Library", "Caches", "trivy"), // macOS
+			filepath.Join(home, ".cache", "trivy"),            // Linux / default
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(filepath.Join(c, "db", "trivy.db")); err == nil {
+				cacheDir = c
+				break
+			}
+		}
+		if cacheDir == "" {
+			cacheDir = filepath.Join(home, ".cache", "trivy") // fallback for error message
+		}
 	}
 	dbPath = filepath.Join(cacheDir, "db", "trivy.db")
 	info, statErr := os.Stat(dbPath)
 	if statErr != nil {
-		return dbPath, time.Time{}, fmt.Errorf("not found at %s", dbPath)
+		return dbPath, time.Time{}, fmt.Errorf("not found at %s — set TRIVY_CACHE_DIR if your DB is elsewhere", dbPath)
 	}
 
 	// Prefer metadata.json for an accurate download timestamp.

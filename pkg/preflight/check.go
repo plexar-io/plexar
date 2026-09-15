@@ -176,8 +176,13 @@ func checkTrivyTooling(imageSrc string) []CheckResult {
 	trivyPath, err := scanner.FindTrivy()
 	if err != nil {
 		results = append(results, CheckResult{
-			Name:    "Trivy binary",
-			Message: "trivy binary not found.\n     Fix: install trivy, or set TRIVY_PATH=/path/to/trivy\n     Air-gapped: copy the trivy binary onto this host and export TRIVY_PATH.",
+			Name: "Trivy binary",
+			Message: "trivy binary not found.\n" +
+				"     Install:\n" +
+				"       macOS:  brew install trivy\n" +
+				"       Linux:  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin\n" +
+				"       Or set: TRIVY_PATH=/path/to/trivy\n" +
+				"     Skip:    --vuln-source=none (score on blast radius + permissions only)",
 		})
 		return results // nothing else is meaningful without trivy
 	}
@@ -188,7 +193,7 @@ func checkTrivyTooling(imageSrc string) []CheckResult {
 	if dberr != nil {
 		results = append(results, CheckResult{
 			Name:    "Trivy vulnerability DB",
-			Message: fmt.Sprintf("Trivy DB %v.\n     The CRI-O/air-gapped scan path uses --offline-scan and will NOT auto-download it — scans would return no CVEs.\n     Fix: on an internet-connected host run 'trivy image --download-db-only',\n     then copy ~/.cache/trivy to this host (or point TRIVY_CACHE_DIR at it).", dberr),
+			Message: fmt.Sprintf("Trivy DB %v.\n     The CRI-O/air-gapped scan path uses --offline-scan and will NOT auto-download it — scans would return no CVEs.\n     Fix: on an internet-connected host run 'trivy image --download-db-only',\n     then copy the cache to this host:\n       macOS: ~/Library/Caches/trivy\n       Linux: ~/.cache/trivy\n     Or set TRIVY_CACHE_DIR to point at the DB location.", dberr),
 		})
 	} else if age := time.Since(updatedAt); age > 14*24*time.Hour {
 		results = append(results, CheckResult{
