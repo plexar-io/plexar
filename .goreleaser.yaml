@@ -80,19 +80,8 @@ docker_manifests:
       - "ghcr.io/plexar-io/plexar:{{ .Version }}-amd64"
       - "ghcr.io/plexar-io/plexar:{{ .Version }}-arm64"
 
-brews:
-  - name: plexar
-    repository:
-      owner: plexar-io
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: "https://plexar-io.io/"
-    description: "The security, compliance, and runtime intelligence layer for Kubernetes workloads"
-    license: "Apache-2.0"
-    install: |
-      bin.install "plexar"
-    test: |
-      system "#{bin}/plexar", "version"
+# Homebrew formula publishing is intentionally disabled until a valid
+# HOMEBREW_TAP_GITHUB_TOKEN is configured for the plexar-io/homebrew-tap repo.
 
 release:
   github:
