@@ -350,17 +350,24 @@ func RecomputeAttackPaths(result *types.ScanResult) *types.AttackPathSummary {
 		if len(cves) == 0 {
 			cves = s.Vulns.TopCVEs
 		}
-		totalCVEs += s.Vulns.TotalCount
+
 		inUseCount := 0
 		for _, c := range cves {
 			if c.InUse {
 				inUseCount++
 			}
 		}
-		// If we only have topCVEs (sample), extrapolate to totalCount
-		if len(s.Vulns.AllCVEs) == 0 && len(cves) > 0 && s.Vulns.TotalCount > len(cves) {
+
+		// Use actual CVE list length when AllCVEs present; extrapolate from
+		// TopCVEs sample otherwise
+		if len(s.Vulns.AllCVEs) > 0 {
+			totalCVEs += len(cves)
+		} else if len(cves) > 0 && s.Vulns.TotalCount > len(cves) {
 			ratio := float64(inUseCount) / float64(len(cves))
 			inUseCount = int(ratio * float64(s.Vulns.TotalCount))
+			totalCVEs += s.Vulns.TotalCount
+		} else {
+			totalCVEs += len(cves)
 		}
 		inUseCVEs += inUseCount
 		podInUseMap[s.PodName] = inUseCount
@@ -380,6 +387,10 @@ func RecomputeAttackPaths(result *types.ScanResult) *types.AttackPathSummary {
 	latestAttackPath = summary
 	latestInsights = insights
 	insightsMu.Unlock()
+
+	// Attach to the result so JSON export includes them
+	result.RuntimeInsights = insights
+	result.AttackPaths = summary
 
 	return summary
 }
@@ -734,6 +745,12 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 
 	complianceResults := compliance.MapAll(scores, netPolCount, rbacFindings)
 
+	// Attach runtime insights to the result
+	insightsMu.RLock()
+	currentInsights := latestInsights
+	currentAttackPaths := latestAttackPath
+	insightsMu.RUnlock()
+
 	result := &types.ScanResult{
 		ClusterName:     clusterName,
 		Namespace:       namespace,
@@ -747,6 +764,8 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		RBACFindings:    rbacFindings,
 		HubbleAvailable: hubbleAvailable,
 		FlowSource:      flowSource,
+		RuntimeInsights: currentInsights,
+		AttackPaths:     currentAttackPaths,
 	}
 
 	finishScan(progress, clusterScore, len(scores))

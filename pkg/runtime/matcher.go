@@ -33,9 +33,9 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 	updated := make([]types.VulnSummary, len(vulns))
 	podInUseMap := make(map[string]int)
 
-	// Track unique CVEs across all pods (deduplicate by CVE ID)
-	uniqueCVEs := make(map[string]bool)  // CVE ID -> seen
-	uniqueInUse := make(map[string]bool) // CVE ID -> in-use
+	// Instance counts (total CVE rows across all pods — matches what the user sees)
+	totalInstances := 0
+	inUseInstances := 0
 	// Track images already counted for bulk (non-TopCVE) totals
 	seenImages := make(map[string]bool)
 	bulkTotal := 0
@@ -57,45 +57,52 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 					cve.InUse = true
 					cve.Confidence = matchType
 					podInUseCount++
-					uniqueCVEs[cve.ID] = true
-					uniqueInUse[cve.ID] = true
 				} else {
 					cve.Confidence = 0
-					uniqueCVEs[cve.ID] = true
 				}
 			} else if hasProfile && isFallback {
 				if isPackageInUse(cve.Package, pkgSet) {
 					cve.InUse = true
 					cve.Confidence = ConfidenceConservative
 					podInUseCount++
-					uniqueCVEs[cve.ID] = true
-					uniqueInUse[cve.ID] = true
-				} else {
-					uniqueCVEs[cve.ID] = true
 				}
 			} else if !hasProfile {
 				cve.InUse = true
 				cve.Confidence = ConfidenceConservative
 				podInUseCount++
-				uniqueCVEs[cve.ID] = true
-				uniqueInUse[cve.ID] = true
-			} else {
-				uniqueCVEs[cve.ID] = true
 			}
 		}
 
-		// Tag TopCVEs
-		for j := range updated[i].TopCVEs {
-			tagCVE(&updated[i].TopCVEs[j])
-		}
-
-		// Tag AllCVEs (used by CVE Explorer /api/cves endpoint)
+		// When AllCVEs is present, tag those (the authoritative list).
+		// Also tag TopCVEs so both slices are consistent.
 		if len(updated[i].AllCVEs) > 0 {
 			for j := range updated[i].AllCVEs {
 				tagCVE(&updated[i].AllCVEs[j])
 			}
+			totalInstances += len(updated[i].AllCVEs)
+			inUseInstances += podInUseCount
+
+			// Sync TopCVEs in-use flags from AllCVEs
+			allMap := make(map[string]*types.CVEInfo)
+			for j := range updated[i].AllCVEs {
+				c := &updated[i].AllCVEs[j]
+				allMap[c.ID+"|"+c.Package] = c
+			}
+			for j := range updated[i].TopCVEs {
+				tc := &updated[i].TopCVEs[j]
+				if ac, ok := allMap[tc.ID+"|"+tc.Package]; ok {
+					tc.InUse = ac.InUse
+					tc.Confidence = ac.Confidence
+				}
+			}
 		} else {
-			// No AllCVEs — count bulk CVEs (beyond TopCVEs) once per unique image
+			// Only TopCVEs available — tag them and estimate bulk
+			for j := range updated[i].TopCVEs {
+				tagCVE(&updated[i].TopCVEs[j])
+			}
+			totalInstances += len(updated[i].TopCVEs)
+			inUseInstances += podInUseCount
+
 			bulkCount := vuln.TotalCount - len(vuln.TopCVEs)
 			if bulkCount > 0 && !seenImages[vuln.ImageName] {
 				seenImages[vuln.ImageName] = true
@@ -112,8 +119,8 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 		podInUseMap[vuln.PodName] = podInUseCount
 	}
 
-	totalCVEs := len(uniqueCVEs) + bulkTotal
-	inUseCVEs := len(uniqueInUse) + bulkInUse
+	totalCVEs := totalInstances + bulkTotal
+	inUseCVEs := inUseInstances + bulkInUse
 
 	noiseReduction := 0.0
 	if totalCVEs > 0 {

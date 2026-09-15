@@ -17,6 +17,8 @@ type ScanResult struct {
 	RBACFindings    []RBACFinding      `json:"rbacFindings,omitempty"`
 	HubbleAvailable bool               `json:"hubbleAvailable,omitempty"`
 	FlowSource      string             `json:"flowSource,omitempty"` // "hubble" or "inferred"
+	RuntimeInsights *RuntimeInsights   `json:"runtimeInsights,omitempty"`
+	AttackPaths     *AttackPathSummary `json:"attackPaths,omitempty"`
 }
 
 // PlexarScore is the composite risk score for a single pod
