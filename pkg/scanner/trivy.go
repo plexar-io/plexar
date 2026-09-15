@@ -338,17 +338,25 @@ func runTrivy(ctx context.Context, trivyPath, image string) ([]types.CVEInfo, er
 }
 
 // runTrivyInput scans a docker-archive tar (exported from CRI-O via skopeo).
+// If a local Trivy DB exists, runs in offline mode (air-gapped safe).
+// Otherwise lets Trivy download the DB on first run.
 func runTrivyInput(ctx context.Context, trivyPath, tarPath, originalImage string) ([]types.CVEInfo, error) {
-	cmd := exec.CommandContext(ctx, trivyPath, "image",
+	args := []string{"image",
 		"--input", tarPath,
 		"--format", "json",
 		"--severity", "CRITICAL,HIGH,MEDIUM",
 		"--scanners", "vuln",
 		"--quiet",
 		"--no-progress",
-		"--skip-db-update",
-		"--offline-scan",
-	)
+	}
+
+	// Only force offline mode if a local DB already exists (air-gapped setup).
+	// Otherwise let Trivy download the DB — the host may have internet access.
+	if _, _, err := TrivyDBInfo(); err == nil {
+		args = append(args, "--skip-db-update", "--offline-scan")
+	}
+
+	cmd := exec.CommandContext(ctx, trivyPath, args...)
 	return parseTrivyOutput(cmd, originalImage)
 }
 
