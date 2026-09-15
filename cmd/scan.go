@@ -90,17 +90,12 @@ func init() {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
-	// Determine progress output
-	var progress *os.File
-	if outputFormat == "table" {
-		progress = os.Stderr
-	}
+	// Always show progress on stderr (even for json/csv/sarif output)
+	progress := os.Stderr
 
 	// Configure vulnerability source with progress and cache options
 	opts := scanner.SourceOptions{Fresh: freshScan, ImageSource: imageSource}
-	if progress != nil {
-		opts.Progress = progress
-	}
+	opts.Progress = progress
 	source, err := scanner.NewSource(vulnSource, opts)
 	if err != nil {
 		return err

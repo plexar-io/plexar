@@ -415,6 +415,12 @@
   .scan-banner.active { display: flex; }
   .scan-banner .mi { font-size: 18px; animation: spin 1.2s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .cve-spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--border); border-top-color: var(--primary-light);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
 </style>
 </head>
 <body>
@@ -2579,6 +2585,9 @@ async function loadCVEs() {
   const status = document.getElementById('cve-status-filter')?.value || '';
   const pkg = document.getElementById('cve-pkg-search')?.value || '';
 
+  // Show loading state immediately
+  showCVELoading(true);
+
   // Map status filter to server-side inuse param for broad categories
   let inuse = '';
   if (status === 'all-inuse') inuse = 'true';
@@ -2605,9 +2614,22 @@ async function loadCVEs() {
       cveData = cveDataFull.slice();
     }
     cvePage = 0;
+    showCVELoading(false);
     renderCVEExplorer();
   } catch (e) {
     console.warn('CVE fetch error:', e);
+    showCVELoading(false);
+  }
+}
+
+function showCVELoading(show) {
+  const tbody = document.getElementById('cve-tbody');
+  const countLabel = document.getElementById('cve-count-label');
+  if (show) {
+    countLabel.textContent = 'Loading...';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:48px 24px">' +
+      '<div style="display:inline-flex;align-items:center;gap:12px;color:var(--text-secondary)">' +
+      '<span class="cve-spinner"></span> Fetching CVEs...</div></td></tr>';
   }
 }
 

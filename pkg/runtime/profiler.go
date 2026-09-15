@@ -52,6 +52,8 @@ func (p *Profiler) ProfileNamespace(ctx context.Context, namespace string) ([]ty
 }
 
 // ProfileNamespaceWithFallback builds runtime profiles with a specified fallback mode.
+// Strategy: try kubectl exec into each pod first (works across nodes), then
+// fall back to host /proc (works when plexar runs on the same node as the pod).
 func (p *Profiler) ProfileNamespaceWithFallback(ctx context.Context, namespace string, fallback FallbackMode) ([]types.RuntimeProfile, error) {
 	pods, err := p.client.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: "status.phase=Running",
@@ -67,53 +69,141 @@ func (p *Profiler) ProfileNamespaceWithFallback(ctx context.Context, namespace s
 				continue
 			}
 
-			// Extract the numeric PID from container status
-			// In a real cluster, we'd use the CRI to get the PID.
-			// For the operator running on the node, we scan /proc for matching cgroup.
-			pids := p.findContainerPIDs(cs.ContainerID)
-			if len(pids) == 0 {
-				// /proc not accessible — use fallback mode
-				profile := buildFallbackProfile(pod.Name, namespace, cs.ContainerID, cs.Image, fallback)
+			// Strategy 1: kubectl exec into the pod (works across nodes)
+			profile, execErr := p.profileViaExec(ctx, pod.Name, namespace, cs.Name, cs.ContainerID, cs.Image)
+			if execErr == nil && len(profile.LoadedPackages) > 0 {
 				profiles = append(profiles, profile)
 				continue
 			}
 
-			libs := make(map[string]bool)
-			files := make(map[string]bool)
-			var binaryLangs []string
-
-			for _, pid := range pids {
-				// Read /proc/<pid>/maps for loaded shared libraries
-				for _, lib := range p.readMaps(pid) {
-					libs[lib] = true
-				}
-				// Read /proc/<pid>/fd for open files (jars, .so, .py, .js, etc.)
-				for _, f := range p.readFDs(pid) {
-					files[f] = true
-				}
-				// Detect Go/Rust statically-linked binaries via /proc/<pid>/exe
-				if lang := p.detectBinaryLanguage(pid); lang != "" {
-					binaryLangs = append(binaryLangs, lang)
-				}
+			// Strategy 2: host /proc scan (works when plexar is on the same node)
+			pids := p.findContainerPIDs(cs.ContainerID)
+			if len(pids) > 0 {
+				profile := p.profileViaProcPIDs(pod.Name, namespace, cs.ContainerID, pids)
+				profiles = append(profiles, profile)
+				continue
 			}
 
-			libList := mapKeys(libs)
-			fileList := mapKeys(files)
-			pkgs := extractPackageNames(libList, fileList)
-
-			profiles = append(profiles, types.RuntimeProfile{
-				PodName:        pod.Name,
-				Namespace:      namespace,
-				ContainerID:    cs.ContainerID,
-				LoadedLibs:     libList,
-				OpenFiles:      fileList,
-				LoadedPackages: pkgs,
-				BinaryLangs:    binaryLangs,
-			})
+			// Strategy 3: fallback
+			fb := buildFallbackProfile(pod.Name, namespace, cs.ContainerID, cs.Image, fallback)
+			profiles = append(profiles, fb)
 		}
 	}
 
 	return profiles, nil
+}
+
+// profileViaExec runs `cat /proc/1/maps` and `ls -la /proc/1/fd/` inside the
+// pod via kubectl exec. This works across all nodes — plexar does NOT need to
+// run on the same host as the pod.
+func (p *Profiler) profileViaExec(ctx context.Context, podName, namespace, containerName, containerID, image string) (types.RuntimeProfile, error) {
+	empty := types.RuntimeProfile{}
+
+	// Read /proc/1/maps inside the container (PID 1 = main process)
+	mapsOut, err := p.client.ExecInPod(ctx, namespace, podName, containerName,
+		[]string{"cat", "/proc/1/maps"})
+	if err != nil {
+		// Some containers don't have `cat` — try with /bin/sh
+		mapsOut, err = p.client.ExecInPod(ctx, namespace, podName, containerName,
+			[]string{"/bin/sh", "-c", "cat /proc/1/maps 2>/dev/null || cat /proc/self/maps 2>/dev/null"})
+		if err != nil {
+			return empty, fmt.Errorf("exec cat /proc/1/maps: %w", err)
+		}
+	}
+
+	libs := make(map[string]bool)
+	for _, line := range strings.Split(mapsOut, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		path := fields[len(fields)-1]
+		if path == "" || path[0] != '/' {
+			continue
+		}
+		if isRuntimeFile(path) && !libs[path] {
+			libs[path] = true
+		}
+	}
+
+	// Read /proc/1/fd via readlink inside the container
+	files := make(map[string]bool)
+	fdOut, fdErr := p.client.ExecInPod(ctx, namespace, podName, containerName,
+		[]string{"/bin/sh", "-c", "ls -la /proc/1/fd/ 2>/dev/null | awk '{print $NF}'"})
+	if fdErr == nil {
+		for _, line := range strings.Split(fdOut, "\n") {
+			path := strings.TrimSpace(line)
+			if path == "" || path[0] != '/' {
+				continue
+			}
+			if isRuntimeFile(path) && !files[path] {
+				files[path] = true
+			}
+		}
+	}
+
+	// Detect Go/Rust via /proc/1/exe
+	var binaryLangs []string
+	exeOut, exeErr := p.client.ExecInPod(ctx, namespace, podName, containerName,
+		[]string{"/bin/sh", "-c", "head -c 4096 /proc/1/exe 2>/dev/null | strings 2>/dev/null | head -50"})
+	if exeErr == nil {
+		if strings.Contains(exeOut, "Go build") || strings.Contains(exeOut, "go.buildid") {
+			binaryLangs = append(binaryLangs, "go")
+		} else if strings.Contains(exeOut, "rustc") || strings.Contains(exeOut, "rust_begin_unwind") {
+			binaryLangs = append(binaryLangs, "rust")
+		}
+	}
+
+	libList := mapKeys(libs)
+	fileList := mapKeys(files)
+	pkgs := extractPackageNames(libList, fileList)
+
+	if len(pkgs) == 0 && len(libs) == 0 {
+		return empty, fmt.Errorf("no runtime data found")
+	}
+
+	return types.RuntimeProfile{
+		PodName:        podName,
+		Namespace:      namespace,
+		ContainerID:    containerID,
+		LoadedLibs:     libList,
+		OpenFiles:      fileList,
+		LoadedPackages: pkgs,
+		BinaryLangs:    binaryLangs,
+	}, nil
+}
+
+// profileViaProcPIDs profiles a container via host /proc when PIDs are available.
+func (p *Profiler) profileViaProcPIDs(podName, namespace, containerID string, pids []int) types.RuntimeProfile {
+	libs := make(map[string]bool)
+	files := make(map[string]bool)
+	var binaryLangs []string
+
+	for _, pid := range pids {
+		for _, lib := range p.readMaps(pid) {
+			libs[lib] = true
+		}
+		for _, f := range p.readFDs(pid) {
+			files[f] = true
+		}
+		if lang := p.detectBinaryLanguage(pid); lang != "" {
+			binaryLangs = append(binaryLangs, lang)
+		}
+	}
+
+	libList := mapKeys(libs)
+	fileList := mapKeys(files)
+	pkgs := extractPackageNames(libList, fileList)
+
+	return types.RuntimeProfile{
+		PodName:        podName,
+		Namespace:      namespace,
+		ContainerID:    containerID,
+		LoadedLibs:     libList,
+		OpenFiles:      fileList,
+		LoadedPackages: pkgs,
+		BinaryLangs:    binaryLangs,
+	}
 }
 
 // buildFallbackProfile creates a RuntimeProfile when /proc is not accessible.

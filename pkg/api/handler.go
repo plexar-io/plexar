@@ -25,6 +25,285 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ── ANSI helpers ──
+const (
+	ansiReset   = "\033[0m"
+	ansiBold    = "\033[1m"
+	ansiDim     = "\033[2m"
+	ansiCyan    = "\033[36m"
+	ansiGreen   = "\033[32m"
+	ansiYellow  = "\033[33m"
+	ansiMagenta = "\033[35m"
+	ansiBlue    = "\033[34m"
+	ansiRed     = "\033[31m"
+	ansiClearLn = "\033[2K"
+	ansiHideCur = "\033[?25l"
+	ansiShowCur = "\033[?25h"
+)
+
+// ASCII art diagrams that cycle during scanning — each is 5 lines tall
+// ASCII art diagrams — nature/journey scenes that tie to security phases.
+// Each is 7 lines tall for visual impact.
+var scanDiagrams = [][]string{
+	{ // 0: Sunrise over mountains — "Starting the journey"
+		"                 *                  ",
+		"              .*' '*.               ",
+		"           .*'       '*.            ",
+		"     .  .*' Scanning... '*.  .      ",
+		"    /|*'                   '*|\\    ",
+		"   / |  .    .       .    .  | \\   ",
+		"  /__|_________________________\\  ",
+	},
+	{ // 1: Telescope on peak — "Scanning vulnerabilities"
+		"           ()                       ",
+		"          /||\\                     ",
+		"         / || \\                    ",
+		"        /  ||  \\  Probing images   ",
+		"     __/___||___\\___               ",
+		"    /       ^^       \\             ",
+		"   /   .  mountains  . \\           ",
+	},
+	{ // 2: Map with trails — "Mapping network"
+		"    +--------+--------+             ",
+		"    | ~ ~ ~  |  /   / |  Mapping    ",
+		"    |   ~ ~  | /___/  |  network    ",
+		"    +--------|--------|  topology   ",
+		"    | /  /   | ~ ~ ~ |             ",
+		"    |/  / X  |  ~ ~  |             ",
+		"    +--------+--------+             ",
+	},
+	{ // 3: Compass — "Finding permissions"
+		"         .---.                       ",
+		"        /  N  \\      Checking       ",
+		"       | W + E |     permissions     ",
+		"        \\  S  /      & RBAC         ",
+		"         '---'                       ",
+		"           |                         ",
+		"           *                         ",
+	},
+	{ // 4: Campfire — "Computing scores"
+		"                                    ",
+		"          )  (  )                    ",
+		"         (  )  (   Scoring           ",
+		"          ) ( ) (  blast radius      ",
+		"         .-------.                   ",
+		"        / ~ ~ ~ ~ \\                ",
+		"       /~~~~~~~~~~~~\\               ",
+	},
+	{ // 5: Binoculars — "Classifying workloads"
+		"        .---.  .---.                 ",
+		"       / o  |  |  o \\  Classifying  ",
+		"      |  .  |  |  .  |  workloads   ",
+		"       \\ | /    \\ | /              ",
+		"        '-'      '-'                 ",
+		"         |   __   |                  ",
+		"         '--'  '--'                  ",
+	},
+	{ // 6: Lighthouse — "Runtime profiling"
+		"           /\\                       ",
+		"          /  \\       Profiling       ",
+		"         / ** \\      runtime         ",
+		"        /  **  \\     packages        ",
+		"       /________\\                    ",
+		"       |  |  |  |                    ",
+		"    ~~~|__|__|__|~~~                  ",
+	},
+	{ // 7: Summit flag — "Attack paths"
+		"               |>                    ",
+		"               |   Attack            ",
+		"              /|\\  path              ",
+		"             / | \\  analysis         ",
+		"           _/  |  \\_                ",
+		"         _/    |    \\_              ",
+		"    ____/      |      \\____         ",
+	},
+	{ // 8: Eagle soaring — "Final analysis"
+		"            .  __  .                 ",
+		"          ---'    '---               ",
+		"       --'    ◈◈    '--   Soaring    ",
+		"     -'    ◈◈◈◈◈◈    '-   above     ",
+		"         ◈◈◈◈◈◈◈◈◈◈       the noise ",
+		"            ^^^^                     ",
+		"        ~~~~    ~~~~                  ",
+	},
+	{ // 9: Constellation — "Connecting the dots"
+		"       *           *                 ",
+		"        \\  *      /     Mapping      ",
+		"         \\/  *   /      exploit      ",
+		"      *--◈------◈--*   chains       ",
+		"         /\\     /                    ",
+		"        /  *   /                     ",
+		"       *      *                      ",
+	},
+}
+
+// spinner draws a single animated line with cycling ASCII art diagrams above it.
+type spinner struct {
+	w         io.Writer
+	phase     string
+	phaseNum  int
+	total     int
+	done      chan struct{}
+	startTime time.Time
+	drawn     int // lines drawn (for clearing)
+}
+
+var activeScanStart time.Time
+
+func startSpinner(w io.Writer, msg string) *spinner {
+	if w == nil || w == io.Discard {
+		return &spinner{done: make(chan struct{})}
+	}
+	if activeScanStart.IsZero() {
+		activeScanStart = time.Now()
+		fmt.Fprintf(w, "%s", ansiHideCur) // hide cursor during animation
+	}
+	activeScanPhase++
+	s := &spinner{
+		w:         w,
+		phase:     msg,
+		phaseNum:  activeScanPhase,
+		total:     7,
+		done:      make(chan struct{}),
+		startTime: time.Now(),
+	}
+	go s.run()
+	return s
+}
+
+var activeScanPhase int
+
+func (s *spinner) run() {
+	if s.w == nil {
+		return
+	}
+	tick := time.NewTicker(120 * time.Millisecond)
+	defer tick.Stop()
+	frame := 0
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-tick.C:
+			s.draw(frame)
+			frame++
+		}
+	}
+}
+
+func (s *spinner) draw(frame int) {
+	if s.w == nil {
+		return
+	}
+
+	// Move cursor up to clear previous drawing
+	if s.drawn > 0 {
+		fmt.Fprintf(s.w, "\033[%dA", s.drawn)
+	}
+
+	lines := 0
+	elapsed := time.Since(activeScanStart).Truncate(time.Second)
+	phaseElapsed := time.Since(s.startTime).Truncate(time.Second)
+
+	// Pick diagram — changes every ~3 seconds
+	diagramIdx := (int(time.Since(activeScanStart).Seconds()) / 3) % len(scanDiagrams)
+	diagram := scanDiagrams[diagramIdx]
+
+	// Color for the diagram cycles subtly
+	colors := []string{ansiCyan, ansiBlue, ansiMagenta, ansiCyan}
+	dColor := colors[diagramIdx%len(colors)]
+
+	// Draw diagram
+	for _, line := range diagram {
+		fmt.Fprintf(s.w, "%s  %s%s%s\n", ansiClearLn, dColor, line, ansiReset)
+		lines++
+	}
+
+	// Blank spacer
+	fmt.Fprintf(s.w, "%s\n", ansiClearLn)
+	lines++
+
+	// Progress bar
+	barWidth := 30
+	filled := (s.phaseNum * barWidth) / s.total
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := ""
+	for i := 0; i < barWidth; i++ {
+		if i < filled {
+			bar += "█"
+		} else if i == filled {
+			pulse := []string{"▓", "▒", "░", "▒"}
+			bar += ansiCyan + pulse[frame%len(pulse)] + ansiGreen
+		} else {
+			bar += "░"
+		}
+	}
+
+	// Braille spinner for extra motion
+	braille := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	dot := braille[frame%len(braille)]
+
+	fmt.Fprintf(s.w, "%s  %s%s%s %s%s%s  %s%d/%d%s  %s%s%s  %s%s%s\n",
+		ansiClearLn,
+		ansiGreen, bar, ansiReset,
+		ansiCyan, dot, ansiReset,
+		ansiDim, s.phaseNum, s.total, ansiReset,
+		ansiBold, s.phase, ansiReset,
+		ansiDim, phaseElapsed, ansiReset)
+	lines++
+
+	// Overall elapsed
+	fmt.Fprintf(s.w, "%s  %s◈ plexar scan%s  %selapsed: %s%s\n",
+		ansiClearLn,
+		ansiDim, ansiReset,
+		ansiDim, elapsed, ansiReset)
+	lines++
+
+	s.drawn = lines
+}
+
+func (s *spinner) stop(result string) {
+	if s.w == nil {
+		return
+	}
+	close(s.done)
+	time.Sleep(15 * time.Millisecond) // let animation goroutine exit
+
+	// Clear the animated block
+	if s.drawn > 0 {
+		fmt.Fprintf(s.w, "\033[%dA", s.drawn)
+		for i := 0; i < s.drawn; i++ {
+			fmt.Fprintf(s.w, "%s\n", ansiClearLn)
+		}
+		fmt.Fprintf(s.w, "\033[%dA", s.drawn)
+	}
+
+	// Print the completed result as a single line
+	phaseElapsed := time.Since(s.startTime).Truncate(time.Second)
+	fmt.Fprintf(s.w, "  %s✓%s %s  %s(%s)%s\n", ansiGreen, ansiReset, result, ansiDim, phaseElapsed, ansiReset)
+}
+
+func resetScanProgress() {
+	activeScanPhase = 0
+	activeScanStart = time.Time{}
+}
+
+// finishScan prints the final summary after all phases complete.
+func finishScan(w io.Writer, clusterScore, podCount int) {
+	if w == nil || w == io.Discard {
+		return
+	}
+	elapsed := time.Since(activeScanStart).Truncate(time.Second)
+	fmt.Fprintf(w, "%s", ansiShowCur) // restore cursor
+	fmt.Fprintf(w, "\n%s  ◈ Scan complete%s — %s%d pods%s scored in %s%s%s, cluster score: %s%d/100%s\n\n",
+		ansiBold, ansiReset,
+		ansiCyan, podCount, ansiReset,
+		ansiGreen, elapsed, ansiReset,
+		ansiYellow, clusterScore, ansiReset)
+}
+
 // ActiveVulnSource is the currently configured vulnerability source.
 // Set this before calling RunScan to use a different scanner backend.
 // Defaults to nil, which auto-selects trivy.
@@ -216,14 +495,19 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		progress = io.Discard
 	}
 
-	fmt.Fprintf(progress, "🛡  Connecting to cluster...\n")
+	// Reset scan progress for each namespace
+	resetScanProgress()
+
 	client, err := k8s.NewClient(kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to cluster: %w", err)
 	}
 
 	clusterName := client.ClusterName()
-	fmt.Fprintf(progress, "📡 Cluster: %s | Namespace: %s\n", clusterName, namespace)
+	fmt.Fprintf(progress, "\n%s  ◈ PLEXAR%s — %s%s%s · %s%s%s\n\n",
+		ansiBold, ansiReset,
+		ansiCyan, clusterName, ansiReset,
+		ansiDim, namespace, ansiReset)
 
 	// Use configured vuln source, default to trivy
 	vulnSource := ActiveVulnSource
@@ -231,22 +515,24 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		vulnSource, _ = scanner.NewSource(scanner.SourceTrivy)
 	}
 
-	// Vuln scanning gets a generous timeout (trivy subprocess can be slow)
-	vulnCtx, vulnCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// Vuln scanning gets a generous timeout — CRI-O clusters need extra time
+	// because each image requires skopeo export (can be 1-2min per large image)
+	vulnCtx, vulnCancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer vulnCancel()
 
-	fmt.Fprintf(progress, "🔍 Scanning vulnerabilities (source: %s)...\n", vulnSource.Name())
+	sp := startSpinner(progress, fmt.Sprintf("Scanning vulnerabilities (source: %s)", vulnSource.Name()))
 	vulns, err := vulnSource.ScanNamespace(vulnCtx, client, namespace)
 	if err != nil {
+		sp.stop(fmt.Sprintf("🔍 Scanning vulnerabilities ✗ %v", err))
 		return nil, fmt.Errorf("CVE scan failed: %w", err)
 	}
-	fmt.Fprintf(progress, "   Found %d pods with vulnerability data\n", len(vulns))
+	sp.stop(fmt.Sprintf("🔍 Found %d pods with vulnerability data", len(vulns)))
 
 	// Network + permissions analysis uses a separate timeout
 	analysisCtx, analysisCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer analysisCancel()
 
-	fmt.Fprintf(progress, "🌐 Mapping network blast radius...\n")
+	sp = startSpinner(progress, "Mapping network blast radius")
 	netAnalyzer := network.New(client)
 
 	// Hubble dual-mode: prefer observed flows, fall back to inferred reachability
@@ -261,18 +547,13 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	hubbleClient := hubble.NewClient(client.Clientset, hubbleOpts...)
 	if hubbleClient.Available(analysisCtx) {
 		hubbleAvailable = true
-		fmt.Fprintf(progress, "   ✅ Hubble Relay detected — using observed network flows\n")
 		flows, flowErr := hubbleClient.CollectFlows(analysisCtx, namespace, 1*time.Hour)
 		if flowErr != nil {
 			log.Printf("[hubble] flow collection failed, falling back to inferred: %v", flowErr)
-			fmt.Fprintf(progress, "   ⚠  Hubble flow collection failed: %v — falling back to inferred\n", flowErr)
 		} else {
 			observedFlows = flows
 			flowSource = "hubble"
-			fmt.Fprintf(progress, "   Collected %d observed flows\n", len(flows))
 		}
-	} else {
-		fmt.Fprintf(progress, "   ℹ  Hubble not detected — using inferred reachability (install Cilium + Hubble for observed flows)\n")
 	}
 
 	var blasts []types.BlastRadius
@@ -283,30 +564,31 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		blasts, netPolCount, err = netAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
 	}
 	if err != nil {
-		fmt.Fprintf(progress, "   ⚠  Network analysis partial: %v\n", err)
+		sp.stop(fmt.Sprintf("🌐 Network analysis partial: %v", err))
+	} else {
+		sp.stop(fmt.Sprintf("🌐 Found %d pods, %d NetworkPolicies (source: %s)", len(blasts), netPolCount, flowSource))
 	}
-	fmt.Fprintf(progress, "   Found %d pods, %d NetworkPolicies (source: %s)\n", len(blasts), netPolCount, flowSource)
 
-	fmt.Fprintf(progress, "🔓 Checking permissions and security context...\n")
+	sp = startSpinner(progress, "Checking permissions and RBAC")
 	permAnalyzer := permissions.New(client)
 	perms, err := permAnalyzer.AnalyzeNamespace(analysisCtx, namespace)
 	if err != nil {
-		fmt.Fprintf(progress, "   ⚠  Permission analysis skipped: %v\n", err)
+		sp.stop(fmt.Sprintf("🔓 Permission analysis skipped: %v", err))
+		sp = startSpinner(progress, "Auditing RBAC permissions")
 	}
 
-	fmt.Fprintf(progress, "� Auditing RBAC permissions...\n")
 	rbacAuditor := rbac.New(client)
 	rbacResult, err := rbacAuditor.AuditNamespace(analysisCtx, namespace)
 	var rbacFindings []types.RBACFinding
 	if err != nil {
-		fmt.Fprintf(progress, "   ⚠  RBAC audit skipped: %v\n", err)
+		sp.stop(fmt.Sprintf("🔓 RBAC audit skipped: %v", err))
 	} else {
 		rbacFindings = rbacResult.Findings
-		fmt.Fprintf(progress, "   %d pods audited, %d critical RBAC, %d high RBAC\n",
-			rbacResult.TotalPods, rbacResult.CriticalCount, rbacResult.HighCount)
+		sp.stop(fmt.Sprintf("🔓 %d pods audited, %d critical RBAC, %d high RBAC",
+			rbacResult.TotalPods, rbacResult.CriticalCount, rbacResult.HighCount))
 	}
 
-	fmt.Fprintf(progress, "🛡  Computing Plexar scores...\n")
+	sp = startSpinner(progress, "Computing Plexar scores")
 
 	blastMap := make(map[string]types.BlastRadius)
 	for _, b := range blasts {
@@ -370,20 +652,24 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	}
 
 	// Classify workloads and apply risk multipliers
-	fmt.Fprintf(progress, "🧠 Classifying workloads...\n")
+	sp.stop(fmt.Sprintf("🛡  Scored %d pods", len(scores)))
+	sp = startSpinner(progress, "Classifying workloads")
 	scores = classifier.ClassifyAll(scores)
-	for _, s := range scores {
-		if s.RiskMultiplier != 1.0 {
-			fmt.Fprintf(progress, "   %s → %s (×%.2f)\n", shortPod(s.PodName), s.WorkloadClass, s.RiskMultiplier)
-		}
-	}
 
 	// Runtime profiling — tag CVEs that are actually "in use" at runtime
-	fmt.Fprintf(progress, "🔬 Profiling runtime packages (In Use detection)...\n")
+	classified := 0
+	for _, s := range scores {
+		if s.RiskMultiplier != 1.0 {
+			classified++
+		}
+	}
+	sp.stop(fmt.Sprintf("🧠 Classified %d pods (%d with risk multipliers)", len(scores), classified))
+
+	sp = startSpinner(progress, "Profiling runtime packages (In Use detection via kubectl exec)")
 	profiler := rt.NewProfiler(client)
 	profiles, profErr := profiler.ProfileNamespace(analysisCtx, namespace)
 	if profErr != nil {
-		fmt.Fprintf(progress, "   ⚠  Runtime profiling skipped: %v\n", profErr)
+		sp.stop(fmt.Sprintf("🔬 Runtime profiling skipped: %v", profErr))
 		// Fallback: count CVEs without runtime data so the page isn't stuck on "pending"
 		var fallbackVulns []types.VulnSummary
 		for _, s := range scores {
@@ -400,8 +686,8 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		}
 		enrichedVulns, insights := rt.MatchInUse(enrichedVulns, profiles)
 		scores = rt.EnrichScoresWithRuntime(scores, enrichedVulns)
-		fmt.Fprintf(progress, "   %d total CVEs, %d in-use (%.0f%% noise reduction)\n",
-			insights.TotalCVEs, insights.InUseCVEs, insights.NoiseReduction)
+		sp.stop(fmt.Sprintf("🔬 %d total CVEs, %d in-use (%.0f%% noise reduction)",
+			insights.TotalCVEs, insights.InUseCVEs, insights.NoiseReduction))
 
 		insightsMu.Lock()
 		latestInsights = insights
@@ -409,19 +695,20 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	}
 
 	// Attack path analysis (includes exploit chain traversal)
-	fmt.Fprintf(progress, "🗺  Computing attack paths + exploit chains...\n")
+	sp = startSpinner(progress, "Computing attack paths + exploit chains")
 	graph := attackpath.Build(scores, rbacFindings)
 	apSummary := attackpath.Analyze(graph)
-	fmt.Fprintf(progress, "   %d attack paths found (%d critical, shortest: %d hops)\n",
+	apResult := fmt.Sprintf("🗺  %d attack paths (%d critical, shortest: %d hops)",
 		apSummary.TotalPaths, apSummary.CriticalPaths, apSummary.ShortestHops)
 	if apSummary.ChainSummary != nil && apSummary.ChainSummary.TotalChains > 0 {
-		fmt.Fprintf(progress, "   ⛓  %d exploit chains (%d critical, %d agent-involved)\n",
+		apResult += fmt.Sprintf("\n   ⛓  %d exploit chains (%d critical, %d agent-involved)",
 			apSummary.ChainSummary.TotalChains, apSummary.ChainSummary.CriticalChains, apSummary.ChainSummary.AgentChains)
 		if apSummary.ChainSummary.TopBreakFix.CVEID != "" {
-			fmt.Fprintf(progress, "   🔧 Top break-the-chain fix: patch %s on %s (eliminates %d chains)\n",
+			apResult += fmt.Sprintf("\n   🔧 Break chain: patch %s on %s (eliminates %d chains)",
 				apSummary.ChainSummary.TopBreakFix.CVEID, apSummary.ChainSummary.TopBreakFix.PodName, apSummary.ChainSummary.TopBreakFix.ChainsEliminated)
 		}
 	}
+	sp.stop(apResult)
 
 	insightsMu.Lock()
 	latestAttackPath = apSummary
@@ -461,6 +748,9 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		HubbleAvailable: hubbleAvailable,
 		FlowSource:      flowSource,
 	}
+
+	finishScan(progress, clusterScore, len(scores))
+	resetScanProgress()
 
 	return result, nil
 }

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Image source constants
@@ -166,6 +167,7 @@ func lastPathComponent(s string) string {
 
 // Export copies an image from CRI-O containers-storage to a docker-archive tar.
 // Returns the tar path and a cleanup function.
+// Uses a per-image 5-minute timeout so large images don't hit the namespace deadline.
 func (c *CRIOResolver) Export(ctx context.Context, imageName string) (tarPath string, cleanup func(), err error) {
 	fullRef, err := c.Resolve(imageName)
 	if err != nil {
@@ -175,11 +177,18 @@ func (c *CRIOResolver) Export(ctx context.Context, imageName string) (tarPath st
 	h := sha256.Sum256([]byte(fullRef))
 	tarPath = fmt.Sprintf("/tmp/plexar-crio-%x.tar", h[:8])
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c",
+	// Per-image timeout: 5 minutes for skopeo export (large images can be >1GB)
+	exportCtx, exportCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer exportCancel()
+
+	cmd := exec.CommandContext(exportCtx, "/bin/sh", "-c",
 		fmt.Sprintf("skopeo copy containers-storage:%s docker-archive:%s 2>/dev/null", fullRef, tarPath))
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tarPath)
+		if exportCtx.Err() == context.DeadlineExceeded {
+			return "", nil, fmt.Errorf("skopeo export timed out for %s (>5min, image may be too large)", fullRef)
+		}
 		return "", nil, fmt.Errorf("skopeo export failed for %s: %w (%s)", fullRef, err, strings.TrimSpace(string(output)))
 	}
 

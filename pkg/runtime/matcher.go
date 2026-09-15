@@ -49,25 +49,24 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 
 		podInUseCount := 0
 
-		for j, cve := range updated[i].TopCVEs {
+		// Helper: tag a single CVE based on runtime profile
+		tagCVE := func(cve *types.CVEInfo) {
 			if hasProfile && !isFallback {
-				// Real /proc profile available — use confidence-scored matching
 				matchType := matchPackageConfidence(cve.Package, pkgSet)
 				if matchType > 0 {
-					updated[i].TopCVEs[j].InUse = true
-					updated[i].TopCVEs[j].Confidence = matchType
+					cve.InUse = true
+					cve.Confidence = matchType
 					podInUseCount++
 					uniqueCVEs[cve.ID] = true
 					uniqueInUse[cve.ID] = true
 				} else {
-					updated[i].TopCVEs[j].Confidence = 0
+					cve.Confidence = 0
 					uniqueCVEs[cve.ID] = true
 				}
 			} else if hasProfile && isFallback {
-				// Fallback profile (image-based estimate) — conservative confidence
 				if isPackageInUse(cve.Package, pkgSet) {
-					updated[i].TopCVEs[j].InUse = true
-					updated[i].TopCVEs[j].Confidence = ConfidenceConservative
+					cve.InUse = true
+					cve.Confidence = ConfidenceConservative
 					podInUseCount++
 					uniqueCVEs[cve.ID] = true
 					uniqueInUse[cve.ID] = true
@@ -75,9 +74,8 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 					uniqueCVEs[cve.ID] = true
 				}
 			} else if !hasProfile {
-				// No runtime profile available — conservatively mark as in-use
-				updated[i].TopCVEs[j].InUse = true
-				updated[i].TopCVEs[j].Confidence = ConfidenceConservative
+				cve.InUse = true
+				cve.Confidence = ConfidenceConservative
 				podInUseCount++
 				uniqueCVEs[cve.ID] = true
 				uniqueInUse[cve.ID] = true
@@ -86,18 +84,29 @@ func MatchInUse(vulns []types.VulnSummary, profiles []types.RuntimeProfile) ([]t
 			}
 		}
 
-		// Count bulk CVEs (beyond TopCVEs) once per unique image
-		bulkCount := vuln.TotalCount - len(vuln.TopCVEs)
-		if bulkCount > 0 && !seenImages[vuln.ImageName] {
-			seenImages[vuln.ImageName] = true
-			bulkTotal += bulkCount
-			if !hasProfile {
-				bulkInUse += bulkCount
+		// Tag TopCVEs
+		for j := range updated[i].TopCVEs {
+			tagCVE(&updated[i].TopCVEs[j])
+		}
+
+		// Tag AllCVEs (used by CVE Explorer /api/cves endpoint)
+		if len(updated[i].AllCVEs) > 0 {
+			for j := range updated[i].AllCVEs {
+				tagCVE(&updated[i].AllCVEs[j])
+			}
+		} else {
+			// No AllCVEs — count bulk CVEs (beyond TopCVEs) once per unique image
+			bulkCount := vuln.TotalCount - len(vuln.TopCVEs)
+			if bulkCount > 0 && !seenImages[vuln.ImageName] {
+				seenImages[vuln.ImageName] = true
+				bulkTotal += bulkCount
+				if !hasProfile {
+					bulkInUse += bulkCount
+					podInUseCount += bulkCount
+				}
+			} else if bulkCount > 0 && !hasProfile {
 				podInUseCount += bulkCount
 			}
-		} else if bulkCount > 0 && !hasProfile {
-			// Still count per-pod for the bar chart even if image is duplicate
-			podInUseCount += bulkCount
 		}
 
 		podInUseMap[vuln.PodName] = podInUseCount

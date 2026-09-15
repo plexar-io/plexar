@@ -8,10 +8,13 @@ The security, compliance, and runtime intelligence layer for Kubernetes workload
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen?style=flat-square)]()
+[![CI](https://github.com/plexar-io/plexar/actions/workflows/ci.yml/badge.svg)](https://github.com/plexar-io/plexar/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/plexar-io/plexar?style=flat-square&color=brightgreen)](https://github.com/plexar-io/plexar/releases)
 [![CNCF Landscape](https://img.shields.io/badge/CNCF-Landscape-326CE5?style=flat-square&logo=cncf)](https://landscape.cncf.io)
 
-[Quick Start](#-quick-start) · [Features](#-features) · [Documentation](#-compliance-frameworks) · [API Reference](#-api-reference) · [Contributing](#-contributing)
+[Quick Start](#-quick-start) · [GitHub Action](#-github-action) · [Features](#-features) · [Documentation](#-compliance-frameworks) · [API Reference](#-api-reference)
+
+![Plexar Scan Demo](docs/demo.gif)
 
 </div>
 
@@ -19,11 +22,11 @@ The security, compliance, and runtime intelligence layer for Kubernetes workload
 
 ## Why Plexar?
 
-Traditional scanners tell you _"this pod has 3 critical CVEs."_
+Traditional scanners dump **hundreds of CVEs** on your team. Plexar tells you which ones actually matter.
 
-Plexar tells you:
-
-> **"This pod has 3 critical CVEs, can reach your database, has cluster-admin RBAC, runs privileged, and has internet egress. The CVEs are loaded in memory at runtime. Fix this one first."**
+> Your scanner says **"142 critical CVEs across 40 pods."**
+>
+> Plexar says **"3 of those CVEs are loaded in memory, reachable from the internet, and one hop from cluster-admin. Fix these 3. Ignore the other 139."**
 
 |                   | `payment-service` | `inventory-service` |
 | ----------------- | ----------------- | ------------------- |
@@ -34,7 +37,7 @@ Plexar tells you:
 | **Runtime**       | 3/3 in use        | 0/3 in use          |
 | **Plexar Score**  | **92** Critical   | **12** Low          |
 
-Same CVEs. Completely different risk. **Plexar tells you which one to fix first.**
+Same CVEs. Completely different risk. **Fix the one that matters, not the 139 that don't.**
 
 ### What makes Plexar different
 
@@ -52,7 +55,7 @@ Same CVEs. Completely different risk. **Plexar tells you which one to fix first.
 | Vanta / Drata integration       |   -   |     -     |     -     |  **Yes**   |
 | Self-hosted                     |  Yes  |  Partial  |     -     |  **Yes**   |
 | MCP server (AI assistants)      |   -   |    Yes    |     -     |  **Yes**   |
-| **Price**                       | Free  | Freemium  | $100k+/yr |  **Free**  |
+| **Price**                       | Free  | Freemium  |    $$$    |  **Free**  |
 
 ---
 
@@ -138,6 +141,62 @@ git clone https://github.com/plexar-io/plexar.git && cd plexar
 
 ---
 
+## ◈ GitHub Action
+
+Add Plexar security scanning to any CI/CD pipeline:
+
+```yaml
+# .github/workflows/security.yml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  plexar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Set up your cluster access (kind, EKS, GKE, etc.)
+      - uses: helm/kind-action@v1
+      - run: kubectl apply -f k8s/
+
+      # Run Plexar scan
+      - uses: plexar-io/plexar/action@v1
+        id: scan
+        with:
+          namespace: default
+          fail-on: "75"           # Fail CI if cluster score >= 75
+
+      # Use the outputs
+      - run: |
+          echo "Score: ${{ steps.scan.outputs.cluster-score }}"
+          echo "In-use CVEs: ${{ steps.scan.outputs.in-use-cves }}"
+          echo "Attack paths: ${{ steps.scan.outputs.attack-paths }}"
+```
+
+### Action inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `version` | `latest` | Plexar version to install |
+| `namespace` | `default` | Kubernetes namespace to scan |
+| `all-namespaces` | `false` | Scan all namespaces |
+| `fail-on` | `0` | Fail if cluster score >= threshold (0 = never fail) |
+| `output` | `table` | Output format: `table`, `json`, or a PDF path |
+| `upload-artifact` | `true` | Upload JSON results as Actions artifact |
+
+### Action outputs
+
+| Output | Description |
+|--------|-------------|
+| `cluster-score` | Overall risk score (0-100) |
+| `critical-cves` | Number of critical CVEs |
+| `in-use-cves` | CVEs confirmed loaded at runtime |
+| `noise-reduction` | Percentage of CVEs filtered as dormant |
+| `attack-paths` | Number of attack paths found |
+
+---
+
 ## ◈ Features
 
 ### Blast Radius Scoring
@@ -166,7 +225,7 @@ Plexar reads `/proc/<pid>/maps` and `/proc/<pid>/fd` to identify which packages 
 - **Go/Rust detection** — identifies statically-linked binaries via ELF headers
 - **~95% noise reduction** — only in-use CVEs bubble to the top
 
-> _Sysdig charges $100k+/yr for this. Plexar does it free, self-hosted._
+> _Enterprise tools charge $$$ for this. Plexar does it free, self-hosted._
 
 ### Attack Path Analysis
 
@@ -365,8 +424,8 @@ Also supports **PagerDuty** (Events API v2) and **Jira** (auto-created tickets).
 ```json
 {
   "mcpServers": {
-    "reflex": {
-      "command": "reflex",
+    "plexar": {
+      "command": "plexar",
       "args": ["mcp", "--namespace", "production"]
     }
   }
@@ -807,6 +866,6 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 **◈ Plexar** — See further. Secure what matters.
 
-[Website](https://plexar.io) · [Documentation](https://docs.plexar.io) · [GitHub](https://github.com/plexar-io/plexar) · [Discord](https://discord.gg/reflex)
+[Website](https://plexar.io) · [Documentation](https://docs.plexar.io) · [GitHub](https://github.com/plexar-io/plexar)
 
 </div>

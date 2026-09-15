@@ -1,16 +1,21 @@
 package k8s
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/util/homedir"
 )
 
@@ -129,4 +134,58 @@ func newKubectlClient() (*Client, error) {
 // ClusterName returns the current cluster context name
 func (c *Client) ClusterName() string {
 	return c.clusterName
+}
+
+// ExecInPod runs a command inside a pod container and returns stdout.
+// If the RestConfig is a kubectl-transport stub, it shells out to `kubectl exec` instead.
+func (c *Client) ExecInPod(ctx context.Context, namespace, podName, container string, command []string) (string, error) {
+	// If using kubectl transport, shell out directly
+	if UseKubectlTransport || c.RestConfig == nil || c.RestConfig.Host == "http://kubectl-transport" {
+		return c.kubectlExec(namespace, podName, container, command)
+	}
+
+	req := c.Clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(namespace).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: container,
+			Command:   command,
+			Stdout:    true,
+			Stderr:    true,
+		}, scheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
+	if err != nil {
+		return "", fmt.Errorf("create executor: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		return "", fmt.Errorf("exec in pod %s/%s: %w (stderr: %s)", namespace, podName, err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
+
+// kubectlExec shells out to kubectl exec for restricted environments.
+func (c *Client) kubectlExec(namespace, podName, container string, command []string) (string, error) {
+	args := []string{"exec", "-n", namespace, podName}
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+	args = append(args, "--")
+	args = append(args, command...)
+
+	cmd := exec.Command("kubectl", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("kubectl exec %s/%s: %w", namespace, podName, err)
+	}
+	return string(out), nil
 }

@@ -1,0 +1,178 @@
+name: "Plexar Kubernetes Security Scan"
+description: "Scan Kubernetes workloads for vulnerabilities with blast radius scoring, runtime in-use detection, and attack path analysis"
+author: "plexar-io"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  version:
+    description: "Plexar version to install (default: latest)"
+    required: false
+    default: "latest"
+  namespace:
+    description: "Kubernetes namespace to scan"
+    required: false
+    default: "default"
+  all-namespaces:
+    description: "Scan all namespaces"
+    required: false
+    default: "false"
+  output:
+    description: "Output format: table, json, or a file path for PDF (e.g. report.pdf)"
+    required: false
+    default: "table"
+  fail-on:
+    description: "Fail the action if cluster score exceeds this threshold (0-100, 0=never fail)"
+    required: false
+    default: "0"
+  kubeconfig:
+    description: "Path to kubeconfig file"
+    required: false
+    default: ""
+  upload-artifact:
+    description: "Upload scan results as a GitHub Actions artifact"
+    required: false
+    default: "true"
+  sarif:
+    description: "Generate SARIF output for GitHub Code Scanning integration"
+    required: false
+    default: "false"
+
+outputs:
+  cluster-score:
+    description: "Overall cluster risk score (0-100)"
+  total-pods:
+    description: "Number of pods scanned"
+  critical-cves:
+    description: "Number of critical CVEs found"
+  in-use-cves:
+    description: "Number of CVEs confirmed in-use at runtime"
+  noise-reduction:
+    description: "Percentage of CVEs filtered as not in-use"
+  attack-paths:
+    description: "Number of attack paths found"
+  scan-file:
+    description: "Path to the JSON scan results file"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Plexar
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+
+        if [ "$VERSION" = "latest" ]; then
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/plexar-io/plexar/releases/latest \
+            | grep "browser_download_url.*linux_amd64.tar.gz" \
+            | cut -d '"' -f 4)
+        else
+          DOWNLOAD_URL="https://github.com/plexar-io/plexar/releases/download/v${VERSION}/plexar_${VERSION}_linux_amd64.tar.gz"
+        fi
+
+        echo "::group::Installing Plexar ${VERSION}"
+        curl -sL "$DOWNLOAD_URL" | tar xz -C /usr/local/bin plexar
+        chmod +x /usr/local/bin/plexar
+        plexar version
+        echo "::endgroup::"
+
+    - name: Run Plexar Scan
+      shell: bash
+      env:
+        PLEXAR_NAMESPACE: ${{ inputs.namespace }}
+        KUBECONFIG: ${{ inputs.kubeconfig }}
+      run: |
+        set -euo pipefail
+
+        ARGS=""
+        if [ "${{ inputs.all-namespaces }}" = "true" ]; then
+          ARGS="-A"
+        else
+          ARGS="-n ${{ inputs.namespace }}"
+        fi
+
+        # Always produce JSON for parsing
+        SCAN_FILE="${RUNNER_TEMP}/plexar-scan.json"
+        plexar scan $ARGS -o json > "$SCAN_FILE"
+
+        # Extract metrics from JSON
+        CLUSTER_SCORE=$(jq -r '.clusterScore // 0' "$SCAN_FILE")
+        TOTAL_PODS=$(jq -r '.totalPods // 0' "$SCAN_FILE")
+
+        # Count critical CVEs
+        CRITICAL_CVES=$(jq '[.scores[]?.vulns.critical // 0] | add // 0' "$SCAN_FILE")
+
+        # In-use stats (from runtime insights if available)
+        IN_USE=$(jq '[.scores[]?.vulns.allCVEs[]? | select(.inUse == true)] | length // 0' "$SCAN_FILE")
+        TOTAL_CVES=$(jq '[.scores[]?.vulns.totalCount // 0] | add // 0' "$SCAN_FILE")
+        if [ "$TOTAL_CVES" -gt 0 ]; then
+          NOISE_REDUCTION=$(echo "scale=1; ($TOTAL_CVES - $IN_USE) * 100 / $TOTAL_CVES" | bc)
+        else
+          NOISE_REDUCTION="0"
+        fi
+
+        ATTACK_PATHS=$(jq '.attackPaths.totalPaths // 0' "$SCAN_FILE")
+
+        # Set outputs
+        echo "cluster-score=$CLUSTER_SCORE" >> "$GITHUB_OUTPUT"
+        echo "total-pods=$TOTAL_PODS" >> "$GITHUB_OUTPUT"
+        echo "critical-cves=$CRITICAL_CVES" >> "$GITHUB_OUTPUT"
+        echo "in-use-cves=$IN_USE" >> "$GITHUB_OUTPUT"
+        echo "noise-reduction=${NOISE_REDUCTION}%" >> "$GITHUB_OUTPUT"
+        echo "attack-paths=$ATTACK_PATHS" >> "$GITHUB_OUTPUT"
+        echo "scan-file=$SCAN_FILE" >> "$GITHUB_OUTPUT"
+
+        # Print summary
+        echo ""
+        echo "◈ Plexar Scan Summary"
+        echo "  Cluster Score: $CLUSTER_SCORE/100"
+        echo "  Pods Scanned:  $TOTAL_PODS"
+        echo "  Critical CVEs: $CRITICAL_CVES"
+        echo "  In-Use CVEs:   $IN_USE / $TOTAL_CVES (${NOISE_REDUCTION}% noise reduction)"
+        echo "  Attack Paths:  $ATTACK_PATHS"
+
+        # Write GitHub Step Summary
+        cat >> "$GITHUB_STEP_SUMMARY" << EOF
+
+        ## ◈ Plexar Security Scan
+
+        | Metric | Value |
+        |--------|-------|
+        | Cluster Score | **${CLUSTER_SCORE}/100** |
+        | Pods Scanned | ${TOTAL_PODS} |
+        | Critical CVEs | ${CRITICAL_CVES} |
+        | In-Use CVEs | ${IN_USE} / ${TOTAL_CVES} |
+        | Noise Reduction | ${NOISE_REDUCTION}% |
+        | Attack Paths | ${ATTACK_PATHS} |
+        EOF
+
+        # User-requested output format
+        OUTPUT="${{ inputs.output }}"
+        if [ "$OUTPUT" = "table" ]; then
+          plexar scan $ARGS 2>/dev/null || true
+        elif [[ "$OUTPUT" == *.pdf ]]; then
+          plexar scan $ARGS -o "$OUTPUT" 2>/dev/null || true
+        fi
+
+    - name: Upload Scan Artifact
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: plexar-scan-results
+        path: ${{ runner.temp }}/plexar-scan.json
+        retention-days: 30
+
+    - name: Threshold Check
+      shell: bash
+      if: ${{ inputs.fail-on != '0' }}
+      run: |
+        SCORE=$(jq -r '.clusterScore // 0' "${{ runner.temp }}/plexar-scan.json")
+        THRESHOLD=${{ inputs.fail-on }}
+        if [ "$SCORE" -ge "$THRESHOLD" ]; then
+          echo "::error::Plexar cluster score ($SCORE) exceeds threshold ($THRESHOLD)"
+          exit 1
+        fi
+        echo "Cluster score ($SCORE) is below threshold ($THRESHOLD) — passed"
