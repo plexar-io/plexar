@@ -1,0 +1,158 @@
+# -- Number of replicas
+replicaCount: 1
+
+image:
+  # -- Image repository
+  repository: ghcr.io/plexar-io/plexar
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to chart appVersion)
+  tag: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a service account
+  create: true
+  # -- Annotations for the service account
+  annotations: {}
+  # -- Service account name (auto-generated if not set)
+  name: ""
+
+rbac:
+  # -- Create ClusterRole and ClusterRoleBinding
+  create: true
+
+# -- Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+# -- Container security context
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# Plexar scan configuration
+# ---------------------------------------------------------------------------
+
+# -- Kubernetes namespace(s) to scan
+targetNamespace: default
+# -- Scan interval for continuous mode
+scanInterval: 5m
+# -- Enable the embedded web dashboard
+ui: true
+# -- Vulnerability source: trivy, trivy-operator, or none
+vulnSource: trivy
+
+# ---------------------------------------------------------------------------
+# Integration secrets (all optional)
+# ---------------------------------------------------------------------------
+
+# -- Vanta API token for evidence push
+vantaToken: ""
+# -- Drata API key for evidence push
+drataKey: ""
+# -- Slack webhook URL for alerts
+slackWebhookUrl: ""
+
+# -- Evidence sink DSNs (list)
+# Example:
+#   - "s3://accessKey:secretKey@minio:9000/evidence-bucket"
+#   - "webhook://https://siem.corp.com/ingest"
+evidenceSinks: []
+
+# ---------------------------------------------------------------------------
+# Cilium Hubble integration (optional)
+# ---------------------------------------------------------------------------
+
+hubble:
+  # -- Hubble Relay address (host:port). Leave empty for auto-detection via
+  # Kubernetes service lookup (searches for hubble-relay in kube-system).
+  relay: ""
+
+# ---------------------------------------------------------------------------
+# OIDC authentication (optional)
+# ---------------------------------------------------------------------------
+
+oidc:
+  # -- OIDC issuer URL (leave empty to disable)
+  issuer: ""
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- HTTP API / dashboard port
+  port: 8080
+  # -- Prometheus metrics port
+  metricsPort: 9090
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Probes
+# ---------------------------------------------------------------------------
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 10
+
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}
+
+# ---------------------------------------------------------------------------
+# Prometheus ServiceMonitor (requires prometheus-operator CRDs)
+# ---------------------------------------------------------------------------
+
+serviceMonitor:
+  # -- Create a ServiceMonitor resource
+  enabled: false
+  # -- Additional labels for the ServiceMonitor
+  labels: {}
+  # -- Scrape interval
+  interval: 30s
+  # -- Scrape timeout
+  scrapeTimeout: 10s

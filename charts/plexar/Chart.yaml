@@ -1,0 +1,39 @@
+apiVersion: v2
+type: application
+name: plexar
+version: 0.1.0
+appVersion: "0.1.0"
+icon: https://github.com/plexar-io/plexar/raw/main/img/logo.png
+description: The security, compliance, and runtime intelligence layer for Kubernetes workloads
+keywords:
+  - kubernetes
+  - security
+  - compliance
+  - vulnerability
+  - cve
+  - runtime
+  - attack-path
+  - soc2
+  - pci-dss
+  - eu-cra
+  - blast-radius
+  - rbac
+home: https://plexar-io.io/
+sources:
+  - https://github.com/plexar-io/plexar
+maintainers:
+  - name: plexar-io
+    url: https://github.com/plexar-io
+kubeVersion: ">=1.25.0-0"
+annotations:
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://docs.plexar-io.io
+    - name: Source
+      url: https://github.com/plexar-io/plexar
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial Helm chart release

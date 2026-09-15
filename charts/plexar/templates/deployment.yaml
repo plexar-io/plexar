@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "plexar.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexar.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "plexar.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "plexar.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "plexar.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - "--namespace={{ .Values.targetNamespace }}"
+            - "--scan-interval={{ .Values.scanInterval }}"
+            - "--vuln-source={{ .Values.vulnSource }}"
+            - "--bind=0.0.0.0"
+            {{- if .Values.ui }}
+            - "--ui"
+            {{- end }}
+            {{- if .Values.hubble.relay }}
+            - "--hubble-relay={{ .Values.hubble.relay }}"
+            {{- end }}
+            {{- if .Values.oidc.issuer }}
+            - "--oidc-issuer={{ .Values.oidc.issuer }}"
+            {{- end }}
+            {{- range .Values.evidenceSinks }}
+            - "--evidence-sink={{ . }}"
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            {{- if .Values.vantaToken }}
+            - name: PLEXAR_VANTA_TOKEN
+              value: {{ .Values.vantaToken | quote }}
+            {{- end }}
+            {{- if .Values.drataKey }}
+            - name: PLEXAR_DRATA_KEY
+              value: {{ .Values.drataKey | quote }}
+            {{- end }}
+            {{- if .Values.slackWebhookUrl }}
+            - name: PLEXAR_SLACK_WEBHOOK
+              value: {{ .Values.slackWebhookUrl | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: history
+              mountPath: /home/nonroot/.plexar
+      volumes:
+        - name: history
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

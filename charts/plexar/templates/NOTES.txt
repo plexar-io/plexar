@@ -1,0 +1,31 @@
+◈ Plexar installed successfully!
+
+{{- if .Values.ui }}
+
+Dashboard:
+  kubectl port-forward svc/{{ include "plexar.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  Open http://localhost:{{ .Values.service.port }}
+
+{{- end }}
+
+API:
+  kubectl port-forward svc/{{ include "plexar.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  curl http://localhost:{{ .Values.service.port }}/api/scan
+
+Scanning namespace: {{ .Values.targetNamespace }}
+Scan interval:     {{ .Values.scanInterval }}
+
+Useful commands:
+  # Check pod status
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "plexar.name" . }}
+
+  # View logs
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "plexar.name" . }} -f
+
+  # Run an on-demand scan
+  curl http://localhost:{{ .Values.service.port }}/api/scan
+
+  # View compliance status
+  curl http://localhost:{{ .Values.service.port }}/api/compliance
+
+For more information, visit https://docs.plexar.io
