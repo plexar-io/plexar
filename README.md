@@ -64,18 +64,18 @@ Same CVEs. Completely different risk. **Fix the one that matters, not the 139 th
 ### Install
 
 ```bash
-# Homebrew
-brew install plexar-io/tap/plexar
-
 # Go
 go install github.com/plexar-io/plexar@latest
 
-# Binary
-curl -sfL https://get.plexar.io | sh
+# Binary — pick your OS/arch from GitHub Releases:
+#   https://github.com/plexar-io/plexar/releases/latest
+# Example (Linux amd64, v0.1.5):
+curl -sfL https://github.com/plexar-io/plexar/releases/download/v0.1.5/plexar_0.1.5_linux_amd64.tar.gz | tar xz
+sudo mv plexar /usr/local/bin/
 
-# Helm (Kubernetes)
-helm repo add plexar https://charts.plexar.io
-helm install plexar plexar/plexar --namespace plexar-system --create-namespace
+# Helm (Kubernetes) — install from the chart in this repo
+git clone https://github.com/plexar-io/plexar.git && cd plexar
+helm install plexar ./charts/plexar --namespace plexar-system --create-namespace
 
 # From source
 git clone https://github.com/plexar-io/plexar.git

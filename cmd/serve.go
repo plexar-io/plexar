@@ -222,6 +222,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if targetNs == "" {
 			targetNs = namespace
 		}
+
+		// Safety check: refuse to replace a larger scan with a smaller single-namespace scan.
+		// This prevents dashboard filter changes from wiping out multi-namespace data.
+		existing := getCachedResult()
+		if existing != nil && targetNs != existing.Namespace && existing.TotalPods > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{
+				"status":  "rejected",
+				"reason":  "refusing to overwrite existing scan — use the CLI to scan a different namespace",
+				"current": existing.Namespace,
+			})
+			return
+		}
+
 		go func() {
 			setScanning(true)
 			defer setScanning(false)

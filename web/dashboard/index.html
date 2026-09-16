@@ -1778,13 +1778,8 @@ function setView(view) {
 }
 
 function onNsFilterChange() {
-  const ns = document.getElementById('topo-ns-filter')?.value || '';
-  if (ns && S.scan && ns !== S.scan.namespace) {
-    fetch('/api/scan/trigger?namespace=' + encodeURIComponent(ns), { method: 'POST' })
-      .then(r => r.json())
-      .then(d => { if (d.status === 'triggered') setTimeout(fetchAll, 3000); })
-      .catch(() => {});
-  }
+  // Filter displayed data only — never trigger a re-scan from the filter dropdown.
+  // Re-scanning overwrites the cached result and loses multi-namespace data.
   renderTopology();
 }
 
