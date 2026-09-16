@@ -56,6 +56,7 @@ type VulnSummary struct {
 	AllCVEs      []CVEInfo `json:"allCVEs,omitempty"`
 	PodName      string    `json:"podName"`
 	ImageName    string    `json:"imageName"`
+	ScanError    string    `json:"scanError,omitempty"` // non-empty if image scan failed (export/trivy error)
 }
 
 // CVEInfo represents a single CVE finding

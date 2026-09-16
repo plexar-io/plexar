@@ -121,6 +121,7 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 
 			if scanErr != nil {
 				t.log(" ✗ failed (%v)\n", scanErr)
+				summary.ScanError = scanErr.Error()
 				continue
 			}
 			elapsed := time.Since(start).Round(time.Second)
@@ -157,6 +158,7 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 	}
 
 	var results []types.VulnSummary
+	failedScans := 0
 	for _, summary := range podVulns {
 		sort.Slice(summary.TopCVEs, func(i, j int) bool {
 			return summary.TopCVEs[i].CVSS > summary.TopCVEs[j].CVSS
@@ -164,7 +166,14 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 		sort.Slice(summary.AllCVEs, func(i, j int) bool {
 			return summary.AllCVEs[i].CVSS > summary.AllCVEs[j].CVSS
 		})
+		if summary.ScanError != "" {
+			failedScans++
+		}
 		results = append(results, *summary)
+	}
+
+	if failedScans > 0 {
+		t.log("   ⚠  %d/%d image scans failed — those pods show 0 CVEs (not genuinely clean)\n", failedScans, len(podVulns))
 	}
 
 	return results, nil
