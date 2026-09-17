@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/plexar-io/plexar/internal/types"
@@ -42,6 +43,11 @@ func (t *TrivyScanner) log(format string, args ...interface{}) {
 // ScanNamespace discovers pods in the namespace, extracts their container images,
 // and runs `trivy image --format json` on each unique image.
 // Results are cached to ~/.plexar/cache/ so subsequent runs are instant.
+// scanWorkers is the number of parallel image scans. Each worker runs
+// skopeo export + trivy concurrently. 4 workers cuts a 39-image scan
+// from ~3h to ~45min. Kept modest to avoid OOM on constrained nodes.
+const scanWorkers = 4
+
 func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, namespace string) ([]types.VulnSummary, error) {
 	// Verify trivy is available — check PATH, then common locations
 	trivyPath, err := findTrivy()
@@ -74,14 +80,122 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 		}
 	}
 
-	// Deduplicate images — multiple pods may share the same image
-	imageCache := make(map[string][]types.CVEInfo)
 	total := len(targets)
+	isCRIO := t.effectiveImageSource() == ImageSourceCRIO
 
-	// Scan each unique image with trivy (or use cache)
+	// ── Phase 1: Scan unique images (parallel) ──────────────────────
+	// Build list of unique images to scan. Pods sharing the same image
+	// only need one scan — results are fanned out afterwards.
+	type imageResult struct {
+		cves    []types.CVEInfo
+		scanErr string
+	}
+
+	imageResults := make(map[string]*imageResult)  // imageName -> result
+	var imagesToScan []string                      // unique images needing live scan
+	diskCached := make(map[string][]types.CVEInfo) // images found in disk cache
+
+	for _, target := range targets {
+		if _, done := imageResults[target.imageName]; done {
+			continue // already queued or cached
+		}
+		// Check disk cache first
+		if !t.Fresh {
+			if cached, ok := loadCached(target.imageName); ok {
+				imageResults[target.imageName] = &imageResult{cves: cached}
+				diskCached[target.imageName] = cached
+				continue
+			}
+		}
+		imageResults[target.imageName] = nil // placeholder — will be filled by worker
+		imagesToScan = append(imagesToScan, target.imageName)
+	}
+
+	uniqueTotal := len(imagesToScan) + len(diskCached)
+	t.log("   %d pods, %d unique images (%d cached, %d to scan", total, uniqueTotal, len(diskCached), len(imagesToScan))
+	if len(imagesToScan) > 0 && isCRIO {
+		t.log(", %d workers", scanWorkers)
+	}
+	t.log(")\n")
+
+	// Parallel scan with worker pool
+	if len(imagesToScan) > 0 {
+		type scanJob struct {
+			imageName string
+			index     int
+		}
+		jobs := make(chan scanJob, len(imagesToScan))
+		resultsCh := make(chan struct {
+			imageName string
+			result    imageResult
+		}, len(imagesToScan))
+
+		// Determine worker count — use fewer workers for small batches
+		workers := scanWorkers
+		if len(imagesToScan) < workers {
+			workers = len(imagesToScan)
+		}
+
+		// Start workers
+		var wg sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for job := range jobs {
+					t.log("   [%d/%d] %-40s", job.index+1, len(imagesToScan), shortImage(job.imageName))
+					start := time.Now()
+
+					var scanned []types.CVEInfo
+					var scanErr error
+
+					if isCRIO {
+						scanned, scanErr = t.scanViaCRIO(ctx, trivyPath, job.imageName)
+					} else {
+						t.log(" scanning...")
+						scanned, scanErr = runTrivy(ctx, trivyPath, job.imageName)
+					}
+
+					elapsed := time.Since(start).Round(time.Second)
+					if scanErr != nil {
+						t.log(" ✗ failed after %s (%v)\n", elapsed, scanErr)
+						resultsCh <- struct {
+							imageName string
+							result    imageResult
+						}{job.imageName, imageResult{scanErr: scanErr.Error()}}
+					} else {
+						saveCache(job.imageName, scanned)
+						t.log(" ✓ %d CVEs (%s)\n", len(scanned), elapsed)
+						resultsCh <- struct {
+							imageName string
+							result    imageResult
+						}{job.imageName, imageResult{cves: scanned}}
+					}
+				}
+			}()
+		}
+
+		// Send jobs
+		for i, img := range imagesToScan {
+			jobs <- scanJob{imageName: img, index: i}
+		}
+		close(jobs)
+
+		// Collect results in background
+		go func() {
+			wg.Wait()
+			close(resultsCh)
+		}()
+
+		for r := range resultsCh {
+			imageResults[r.imageName] = &r.result
+		}
+	}
+
+	// ── Phase 2: Fan out image results to pods ──────────────────────
 	podVulns := make(map[string]*types.VulnSummary)
 
-	for i, target := range targets {
+	for _, target := range targets {
 		summary, exists := podVulns[target.podName]
 		if !exists {
 			summary = &types.VulnSummary{
@@ -91,53 +205,16 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 			podVulns[target.podName] = summary
 		}
 
-		// Check in-memory cache (same image already scanned in this run)
-		var vulns []types.CVEInfo
-		if cached, ok := imageCache[target.imageName]; ok {
-			vulns = cached
-			t.log("   [%d/%d] %-40s ✓ (same image)\n", i+1, total, shortImage(target.imageName))
-		} else if !t.Fresh {
-			// Check disk cache
-			if cached, ok := loadCached(target.imageName); ok {
-				vulns = cached
-				imageCache[target.imageName] = cached
-				t.log("   [%d/%d] %-40s ✓ cached\n", i+1, total, shortImage(target.imageName))
-			}
+		ir := imageResults[target.imageName]
+		if ir == nil {
+			continue
+		}
+		if ir.scanErr != "" {
+			summary.ScanError = ir.scanErr
+			continue
 		}
 
-		// Cache miss — run trivy
-		if vulns == nil {
-			isCRIO := t.effectiveImageSource() == ImageSourceCRIO
-			if isCRIO {
-				t.log("   [%d/%d] %-40s", i+1, total, shortImage(target.imageName))
-			} else {
-				t.log("   [%d/%d] %-40s scanning...", i+1, total, shortImage(target.imageName))
-			}
-			start := time.Now()
-
-			var scanned []types.CVEInfo
-			var scanErr error
-
-			if isCRIO {
-				scanned, scanErr = t.scanViaCRIO(ctx, trivyPath, target.imageName)
-			} else {
-				scanned, scanErr = runTrivy(ctx, trivyPath, target.imageName)
-			}
-
-			if scanErr != nil {
-				elapsed := time.Since(start).Round(time.Second)
-				t.log(" ✗ failed after %s (%v)\n", elapsed, scanErr)
-				summary.ScanError = scanErr.Error()
-				continue
-			}
-			elapsed := time.Since(start).Round(time.Second)
-			vulns = scanned
-			imageCache[target.imageName] = scanned
-			saveCache(target.imageName, scanned)
-			t.log(" ✓ %d CVEs (%s)\n", len(scanned), elapsed)
-		}
-
-		for _, v := range vulns {
+		for _, v := range ir.cves {
 			switch v.Severity {
 			case "CRITICAL":
 				summary.Critical++

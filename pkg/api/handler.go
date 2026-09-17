@@ -565,7 +565,9 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 
 	// Vuln scanning gets a generous timeout — CRI-O clusters need extra time
 	// because each image requires skopeo export (can be 1-2min per large image)
-	vulnCtx, vulnCancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	// Large clusters (40+ unique images on CRI-O) can take 1-2 hours even with
+	// parallel scanning. 3-hour ceiling prevents timeout on enterprise deployments.
+	vulnCtx, vulnCancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer vulnCancel()
 
 	sp := startSpinner(progress, fmt.Sprintf("Scanning vulnerabilities (source: %s)", vulnSource.Name()))
