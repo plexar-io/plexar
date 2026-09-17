@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -231,13 +232,17 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 		light := make([]lightScore, len(result.Scores))
 		for i, s := range result.Scores {
+			// Omit allCVEs from /api/scan — the dashboard uses /api/cves for the
+			// CVE Explorer table. Keeping 43K entries here adds ~12MB of redundant data.
+			vulns := s.Vulns
+			vulns.AllCVEs = nil
 			light[i] = lightScore{
 				PodName: s.PodName, Namespace: s.Namespace, ImageName: s.ImageName,
 				Total: s.Total, Tier: s.Tier,
 				CVEScore: s.CVEScore, BlastScore: s.BlastScore, PermScore: s.PermScore,
 				PolicyGapScore: s.PolicyGapScore, SensitivityScore: s.SensitivityScore,
 				WorkloadClass: s.WorkloadClass, RiskMultiplier: s.RiskMultiplier, BaseScore: s.BaseScore,
-				Vulns: s.Vulns, Permissions: s.Permissions,
+				Vulns: vulns, Permissions: s.Permissions,
 				Recommendations: s.Recommendations, Roast: s.Roast, Labels: s.Labels,
 				Blast: lightBlast{
 					ReachableCount:     len(s.Blast.ReachableTargets),
@@ -400,20 +405,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 		inUseFilter := r.URL.Query().Get("inuse") // "true" or "false"
 
 		type CVERow struct {
-			PodName     string   `json:"podName"`
-			Namespace   string   `json:"namespace"`
-			ImageName   string   `json:"imageName"`
-			ID          string   `json:"id"`
-			Severity    string   `json:"severity"`
-			CVSS        float64  `json:"cvss"`
-			Package     string   `json:"package"`
-			Installed   string   `json:"installedVersion"`
-			Fixed       string   `json:"fixedVersion"`
-			InUse       bool     `json:"inUse"`
-			Confidence  float64  `json:"confidence"`
-			Published   string   `json:"publishedDate"`
-			Description string   `json:"description,omitempty"`
-			References  []string `json:"references,omitempty"`
+			PodName     string  `json:"podName"`
+			Namespace   string  `json:"namespace"`
+			ImageName   string  `json:"imageName"`
+			ID          string  `json:"id"`
+			Severity    string  `json:"severity"`
+			CVSS        float64 `json:"cvss"`
+			Package     string  `json:"package"`
+			Installed   string  `json:"installedVersion"`
+			Fixed       string  `json:"fixedVersion"`
+			InUse       bool    `json:"inUse"`
+			Confidence  float64 `json:"confidence"`
+			Published   string  `json:"publishedDate"`
+			Description string  `json:"description,omitempty"`
 		}
 
 		var rows []CVERow
@@ -442,6 +446,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 				if inUseFilter == "false" && c.InUse {
 					continue
 				}
+				// Truncate description to save bandwidth (full text via CVE Lookup)
+				desc := c.Description
+				if len(desc) > 200 {
+					desc = desc[:200] + "..."
+				}
 				rows = append(rows, CVERow{
 					PodName:     score.PodName,
 					Namespace:   score.Namespace,
@@ -455,8 +464,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 					InUse:       c.InUse,
 					Confidence:  c.Confidence,
 					Published:   c.PublishedDate,
-					Description: c.Description,
-					References:  c.References,
+					Description: desc,
 				})
 			}
 		}
@@ -470,9 +478,34 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return rows[i].CVSS > rows[j].CVSS
 		})
 
+		// Server-side pagination: ?limit=N&offset=N (default: first 500)
+		total := len(rows)
+		limit := 500
+		offset := 0
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		if o := r.URL.Query().Get("offset"); o != "" {
+			if n, err := strconv.Atoi(o); err == nil && n > 0 {
+				offset = n
+			}
+		}
+		if offset > len(rows) {
+			offset = len(rows)
+		}
+		end := offset + limit
+		if end > len(rows) {
+			end = len(rows)
+		}
+		rows = rows[offset:end]
+
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"cves":  rows,
-			"total": len(rows),
+			"cves":   rows,
+			"total":  total,
+			"offset": offset,
+			"limit":  limit,
 		})
 	})
 

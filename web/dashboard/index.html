@@ -2603,6 +2603,7 @@ ${driftRows ? `<div class="page-break"></div>
 // ═══════════════════════════════════════
 let cveData = [];     // full dataset from API
 let cvePage = 0;
+let cveTotal = 0;
 const CVE_PAGE_SIZE = 50;
 let cveSortKey = 'cvss';
 let cveSortAsc = false;
@@ -2627,7 +2628,7 @@ async function loadCVEs() {
   if (status === 'all-inuse') inuse = 'true';
   else if (status === 'dormant') inuse = 'false';
 
-  let url = '/api/cves?';
+  let url = '/api/cves?limit=500&';
   if (ns) url += 'namespace=' + encodeURIComponent(ns) + '&';
   if (sev) url += 'severity=' + encodeURIComponent(sev) + '&';
   if (inuse) url += 'inuse=' + encodeURIComponent(inuse) + '&';
@@ -2637,6 +2638,7 @@ async function loadCVEs() {
     const res = await fetch(url);
     const data = await res.json();
     cveDataFull = data.cves || [];
+    cveTotal = data.total || cveDataFull.length;
     // Apply client-side confidence filter for granular statuses
     if (status === 'inuse') {
       cveData = cveDataFull.filter(c => c.inUse && (c.confidence || 0) >= 1.0);
@@ -2777,7 +2779,7 @@ function renderCVEExplorer() {
   const pageRows = cveData.slice(start, start + CVE_PAGE_SIZE);
   const totalPages = Math.ceil(cveData.length / CVE_PAGE_SIZE) || 1;
 
-  document.getElementById('cve-count-label').textContent = cveData.length.toLocaleString() + ' CVEs found';
+  document.getElementById('cve-count-label').textContent = cveData.length.toLocaleString() + ' CVEs shown' + (cveTotal > cveData.length ? ' of ' + cveTotal.toLocaleString() + ' total' : '');
   document.getElementById('cve-table-title').textContent = 'All Vulnerabilities';
 
   document.getElementById('cve-tbody').innerHTML = pageRows.length ? pageRows.map((c, idx) => {
@@ -2785,9 +2787,8 @@ function renderCVEExplorer() {
     const inUseTag = inUseBadge(c);
     const detailId = 'cve-detail-' + idx;
     const desc = c.description || '';
-    const refs = c.references || [];
     const nistUrl = 'https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(c.id);
-    const refLinks = refs.length ? refs.slice(0, 5).map(r => `<a href="${esc(r)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px;word-break:break-all">${esc(r)}</a>`).join('<br>') : `<a href="${nistUrl}" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">View on NVD</a>`;
+    const refLinks = `<a href="${nistUrl}" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">View on NVD</a> &middot; <a href="javascript:void(0)" onclick="event.stopPropagation();document.getElementById('cve-lookup-input').value='${esc(c.id)}';showPage('cvelookup');lookupCVE()" style="color:var(--accent);font-size:11px">Full Lookup</a>`;
     const fixInfo = c.fixedVersion ? `<span style="color:var(--success)">Upgrade <code>${esc(c.package)}</code> from <code>${esc(c.installedVersion)}</code> to <code>${esc(c.fixedVersion)}</code></span>` : `<span style="color:var(--text-disabled)">No fix available yet</span>`;
     return `<tr style="cursor:pointer" onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'table-row':'none'">
       <td><span class="${sevClass}" style="font-weight:600">${c.severity}</span></td>

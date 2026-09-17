@@ -11,11 +11,46 @@ import (
 	"github.com/plexar-io/plexar/internal/types"
 )
 
-// ExportJSON writes the full scan result as pretty-printed JSON
+// ExportJSON writes the scan result as pretty-printed JSON.
+// To keep the output compact (~1-2MB instead of ~100MB), allCVEs entries
+// are written without references and description — those fields average
+// 1.5KB per CVE and are duplicated across every pod sharing the same image.
+// The in-memory data retains the full fields for CVE Lookup.
 func ExportJSON(w io.Writer, result *types.ScanResult) error {
+	light := CompactResult(result)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(result)
+	return enc.Encode(light)
+}
+
+// CompactResult returns a copy of the scan result with allCVEs trimmed
+// (no references/description). topCVEs are kept intact since they're small.
+func CompactResult(result *types.ScanResult) *types.ScanResult {
+	out := *result
+	out.Scores = make([]types.PlexarScore, len(result.Scores))
+	for i, s := range result.Scores {
+		out.Scores[i] = s
+		if len(s.Vulns.AllCVEs) > 0 {
+			trimmed := make([]types.CVEInfo, len(s.Vulns.AllCVEs))
+			for j, c := range s.Vulns.AllCVEs {
+				trimmed[j] = types.CVEInfo{
+					ID:               c.ID,
+					Severity:         c.Severity,
+					CVSS:             c.CVSS,
+					Package:          c.Package,
+					InstalledVersion: c.InstalledVersion,
+					FixedVersion:     c.FixedVersion,
+					PublishedDate:    c.PublishedDate,
+					ExploitType:      c.ExploitType,
+					InUse:            c.InUse,
+					Confidence:       c.Confidence,
+					// references and description omitted — saves ~65MB
+				}
+			}
+			out.Scores[i].Vulns.AllCVEs = trimmed
+		}
+	}
+	return &out
 }
 
 // ExportCSV writes a flattened per-pod CSV with key risk columns
@@ -95,8 +130,8 @@ func ExportSARIF(w io.Writer, result *types.ScanResult) error {
 		Text string `json:"text"`
 	}
 	type SARIFResult struct {
-		RuleID  string      `json:"ruleId"`
-		Level   string      `json:"level"`
+		RuleID  string       `json:"ruleId"`
+		Level   string       `json:"level"`
 		Message SARIFMessage `json:"message"`
 	}
 	type SARIFRun struct {
