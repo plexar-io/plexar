@@ -524,6 +524,10 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 	// Re-compute compliance across all namespaces
 	allCompliance = compliance.MapAll(allScores, totalNetPol)
 
+	// Re-run agent security analysis across ALL namespaces so cross-namespace
+	// dependencies are captured (e.g. agentmgr in cisco-ndfc → mcpserver in mcp)
+	crossNSAgentSummary := agentsec.Analyze(allScores)
+
 	return &types.ScanResult{
 		ClusterName:     clusterName,
 		Namespace:       strings.Join(namespaces, ","),
@@ -534,6 +538,7 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 		NetworkPolicies: totalNetPol,
 		Warnings:        allWarnings,
 		Compliance:      allCompliance,
+		AgentSecurity:   crossNSAgentSummary,
 	}, nil
 }
 
