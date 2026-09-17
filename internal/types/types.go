@@ -4,21 +4,22 @@ import "time"
 
 // ScanResult is the complete output of a Plexar scan
 type ScanResult struct {
-	ClusterName     string             `json:"clusterName"`
-	Namespace       string             `json:"namespace"`
-	ScanTime        time.Time          `json:"scanTime"`
-	TotalPods       int                `json:"totalPods"`
-	ClusterScore    int                `json:"clusterScore"`
-	NetworkPolicies int                `json:"networkPolicies"`
-	PodPrefix       string             `json:"podPrefix,omitempty"`
-	Scores          []PlexarScore      `json:"scores"`
-	Warnings        []string           `json:"warnings,omitempty"`
-	Compliance      []ComplianceResult `json:"compliance,omitempty"`
-	RBACFindings    []RBACFinding      `json:"rbacFindings,omitempty"`
-	HubbleAvailable bool               `json:"hubbleAvailable,omitempty"`
-	FlowSource      string             `json:"flowSource,omitempty"` // "hubble" or "inferred"
-	RuntimeInsights *RuntimeInsights   `json:"runtimeInsights,omitempty"`
-	AttackPaths     *AttackPathSummary `json:"attackPaths,omitempty"`
+	ClusterName     string                `json:"clusterName"`
+	Namespace       string                `json:"namespace"`
+	ScanTime        time.Time             `json:"scanTime"`
+	TotalPods       int                   `json:"totalPods"`
+	ClusterScore    int                   `json:"clusterScore"`
+	NetworkPolicies int                   `json:"networkPolicies"`
+	PodPrefix       string                `json:"podPrefix,omitempty"`
+	Scores          []PlexarScore         `json:"scores"`
+	Warnings        []string              `json:"warnings,omitempty"`
+	Compliance      []ComplianceResult    `json:"compliance,omitempty"`
+	RBACFindings    []RBACFinding         `json:"rbacFindings,omitempty"`
+	HubbleAvailable bool                  `json:"hubbleAvailable,omitempty"`
+	FlowSource      string                `json:"flowSource,omitempty"` // "hubble" or "inferred"
+	RuntimeInsights *RuntimeInsights      `json:"runtimeInsights,omitempty"`
+	AttackPaths     *AttackPathSummary    `json:"attackPaths,omitempty"`
+	AgentSecurity   *AgentSecuritySummary `json:"agentSecurity,omitempty"`
 }
 
 // PlexarScore is the composite risk score for a single pod
@@ -42,6 +43,7 @@ type PlexarScore struct {
 	Recommendations  []Recommendation  `json:"recommendations,omitempty"`
 	Roast            string            `json:"roast,omitempty"`
 	Labels           map[string]string `json:"labels,omitempty"`
+	AgentContext     *AgentContext     `json:"agentContext,omitempty"`
 }
 
 // VulnSummary aggregates vulnerability data for a pod
@@ -399,6 +401,51 @@ type ExploitChainSummary struct {
 	AgentChains        int           `json:"agentChains"`
 	TopBreakFix        BreakChainFix `json:"topBreakFix"`
 	UniqueExploitTypes []string      `json:"uniqueExploitTypes"`
+}
+
+// AgentContext captures AI agent-specific security signals for a pod
+type AgentContext struct {
+	IsAgentWorkload       bool          `json:"isAgentWorkload"`
+	AgentClass            string        `json:"agentClass"`                      // "MCP Server", "AI Agent Runtime", etc.
+	MCPTools              []MCPToolInfo `json:"mcpTools,omitempty"`              // tools this MCP server exposes
+	ConnectedAgents       []string      `json:"connectedAgents,omitempty"`       // agent pods that reach this MCP server
+	ConnectedMCPs         []string      `json:"connectedMcps,omitempty"`         // MCP servers this agent connects to
+	ToolReachableServices []string      `json:"toolReachableServices,omitempty"` // services reachable through MCP tools
+	DormantTools          []MCPToolInfo `json:"dormantTools,omitempty"`          // tools exposed but never observed in use
+	ActiveTools           []MCPToolInfo `json:"activeTools,omitempty"`           // tools observed in use
+	AgentBlastRadius      int           `json:"agentBlastRadius"`                // number of services reachable through agent tool chains
+	Warnings              []string      `json:"warnings,omitempty"`
+}
+
+// MCPToolInfo describes a single tool exposed by an MCP server
+type MCPToolInfo struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	InputSchema string   `json:"inputSchema,omitempty"` // JSON schema for tool inputs
+	RiskLevel   string   `json:"riskLevel,omitempty"`   // critical, high, medium, low
+	RiskReason  string   `json:"riskReason,omitempty"`
+	IsActive    bool     `json:"isActive"`          // observed in use
+	Targets     []string `json:"targets,omitempty"` // services/resources this tool accesses
+}
+
+// AgentDependencyEdge represents a connection in the agent dependency graph
+type AgentDependencyEdge struct {
+	From     string `json:"from"`     // pod name
+	To       string `json:"to"`       // pod name
+	EdgeType string `json:"edgeType"` // "agent_to_mcp", "mcp_to_service", "agent_to_agent", "tool_access"
+	Tool     string `json:"tool,omitempty"`
+	Protocol string `json:"protocol,omitempty"` // "mcp", "grpc", "http"
+}
+
+// AgentSecuritySummary is the top-level agent security analysis for a scan
+type AgentSecuritySummary struct {
+	TotalAgentPods    int                   `json:"totalAgentPods"`
+	MCPServers        int                   `json:"mcpServers"`
+	TotalMCPTools     int                   `json:"totalMcpTools"`
+	DormantTools      int                   `json:"dormantTools"`
+	UnprotectedAgents int                   `json:"unprotectedAgents"` // agents without NetworkPolicy
+	AgentDependencies []AgentDependencyEdge `json:"agentDependencies,omitempty"`
+	HighRiskFindings  []string              `json:"highRiskFindings,omitempty"`
 }
 
 // LicenseInfo describes the enterprise license

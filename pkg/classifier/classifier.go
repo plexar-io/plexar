@@ -95,12 +95,22 @@ var rules = []classificationRule{
 	},
 	{
 		class: WorkloadClass{
+			Name: "mcp-server", Label: "MCP Server",
+			RiskMultiplier: 1.55,
+			Reason:         "MCP servers expose tools to AI agents; compromise enables tool abuse, unauthorized actions across all connected services, and data exfiltration via agent tool calls",
+		},
+		imageHints: []string{"mcp", "mcpserver", "mcp-server", "model-context-protocol"},
+		nameHints:  []string{"mcpserver", "mcp"},
+		portHints:  []int{},
+	},
+	{
+		class: WorkloadClass{
 			Name: "ai-agent", Label: "AI Agent Runtime",
 			RiskMultiplier: 1.55,
 			Reason:         "AI agents have non-deterministic communication patterns; compromise enables tool abuse, data exfiltration via LLM, and unpredictable lateral movement",
 		},
 		imageHints: []string{"langchain", "crewai", "autogen", "kagent", "agentkit", "langgraph", "llamaindex", "semantic-kernel", "haystack", "agent-runtime"},
-		nameHints:  []string{"agent", "crew", "orchestrator", "planner", "agentic", "autogen", "langchain"},
+		nameHints:  []string{"agentmgr", "agent", "crew", "orchestrator", "planner", "agentic", "autogen", "langchain"},
 		portHints:  []int{},
 	},
 	{
@@ -110,7 +120,7 @@ var rules = []classificationRule{
 			Reason:         "LLM inference endpoints process untrusted prompts; compromise enables prompt injection, model theft, and data leakage",
 		},
 		imageHints: []string{"vllm", "tgi", "text-generation-inference", "llama-cpp", "llama.cpp", "ollama", "llm-d", "localai", "koboldai", "exllama", "lmdeploy"},
-		nameHints:  []string{"llm", "inference", "completion", "chat", "vllm", "tgi", "ollama", "llama"},
+		nameHints:  []string{"llm", "completion", "chat", "vllm", "tgi", "ollama", "llama"},
 		portHints:  []int{8000, 11434},
 	},
 	{
@@ -149,9 +159,19 @@ var rules = []classificationRule{
 			RiskMultiplier: 1.35,
 			Reason:         "ML workloads often have broad data access and GPU resources; model theft or data poisoning risk",
 		},
-		imageHints: []string{"tensorflow", "pytorch", "nvidia", "cuda", "huggingface", "mlflow", "jupyter", "ray", "triton"},
-		nameHints:  []string{"ml-", "ai-", "model", "inference", "training", "predict", "llm", "embedding", "vector"},
+		imageHints: []string{"tensorflow", "pytorch", "nvidia", "cuda", "huggingface", "mlflow", "jupyter", "ray", "triton", "cisco-nir", "nir/telemetry"},
+		nameHints:  []string{"ml-", "ai-", "model", "training", "predict", "embedding", "vector", "sensei", "genie", "nae", "niadevice", "niametadata", "palantir", "analyze"},
 		portHints:  []int{8888, 8501, 8001},
+	},
+	{
+		class: WorkloadClass{
+			Name: "ai-security", Label: "AI-Native Security",
+			RiskMultiplier: 1.40,
+			Reason:         "AI-powered security services make autonomous enforcement decisions; compromise enables policy bypass and stealth evasion",
+		},
+		imageHints: []string{"hypershield", "ai-sec", "aisec"},
+		nameHints:  []string{"hypershield"},
+		portHints:  []int{},
 	},
 	{
 		class: WorkloadClass{
@@ -211,6 +231,10 @@ func Classify(score *types.PlexarScore) WorkloadClass {
 	nameSegments := strings.FieldsFunc(nameLower, func(r rune) bool {
 		return r == '-' || r == '_' || r == '.'
 	})
+	// Also split image path into segments for matching (e.g. "infra/mcp/mcpserver" -> ["infra","mcp","mcpserver"])
+	imageSegments := strings.FieldsFunc(imageLower, func(r rune) bool {
+		return r == '/' || r == ':' || r == '-' || r == '_' || r == '.'
+	})
 
 	bestMatch := defaultClass
 	bestConfidence := 0
@@ -218,11 +242,21 @@ func Classify(score *types.PlexarScore) WorkloadClass {
 	for _, rule := range rules {
 		confidence := 0
 
-		// Check image hints (strongest signal) — substring match is fine for image refs
+		// Check image hints (strongest signal) — substring match for full path
 		for _, hint := range rule.imageHints {
 			if strings.Contains(imageLower, hint) {
 				confidence += 3
 				break
+			}
+		}
+
+		// Also check image path segments (catches "infra/mcp/mcpserver" matching "mcp")
+		if confidence < 3 {
+			for _, hint := range rule.imageHints {
+				if segmentContains(imageSegments, hint) {
+					confidence += 3
+					break
+				}
 			}
 		}
 
@@ -294,8 +328,10 @@ func ClassifyAll(scores []types.PlexarScore) []types.PlexarScore {
 func IsAgentClass(className string) bool {
 	switch strings.ToLower(className) {
 	case "ai-agent", "ai agent runtime",
+		"mcp-server", "mcp server",
 		"llm-inference", "llm inference",
 		"ai-gateway", "ai gateway",
+		"ai-security", "ai-native security",
 		"rag-pipeline", "rag pipeline",
 		"model-registry", "model registry":
 		return true

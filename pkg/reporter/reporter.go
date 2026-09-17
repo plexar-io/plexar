@@ -111,6 +111,45 @@ func PrintReport(w io.Writer, result *types.ScanResult) {
 			fmt.Fprintln(w)
 		}
 	}
+
+	// Agent Security section
+	if result.AgentSecurity != nil && result.AgentSecurity.TotalAgentPods > 0 {
+		as := result.AgentSecurity
+		fmt.Fprintf(w, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Fprintf(w, "  🤖 Agent Security Analysis\n")
+		fmt.Fprintf(w, "  Agent/AI pods: %d | MCP servers: %d | Unprotected: %d\n\n",
+			as.TotalAgentPods, as.MCPServers, as.UnprotectedAgents)
+
+		// Show agent context for each classified pod
+		for _, s := range result.Scores {
+			if s.AgentContext == nil {
+				continue
+			}
+			ctx := s.AgentContext
+			fmt.Fprintf(w, "    🔹 %s [%s]\n", shortName(s.PodName), ctx.AgentClass)
+			if len(ctx.ConnectedMCPs) > 0 {
+				fmt.Fprintf(w, "      MCP servers: %s\n", strings.Join(ctx.ConnectedMCPs, ", "))
+			}
+			if len(ctx.ConnectedAgents) > 0 {
+				fmt.Fprintf(w, "      Connected agents: %s\n", strings.Join(ctx.ConnectedAgents, ", "))
+			}
+			if ctx.AgentBlastRadius > 0 {
+				fmt.Fprintf(w, "      Agent blast radius: %d services\n", ctx.AgentBlastRadius)
+			}
+			for _, w2 := range ctx.Warnings {
+				fmt.Fprintf(w, "      ⚠  %s\n", w2)
+			}
+			fmt.Fprintln(w)
+		}
+
+		if len(as.HighRiskFindings) > 0 {
+			fmt.Fprintf(w, "  🚨 High-Risk Agent Findings:\n")
+			for _, f := range as.HighRiskFindings {
+				fmt.Fprintf(w, "    • %s\n", f)
+			}
+			fmt.Fprintln(w)
+		}
+	}
 }
 
 func shortName(podName string) string {

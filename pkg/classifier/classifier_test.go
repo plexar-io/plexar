@@ -100,6 +100,41 @@ func TestClassifyAllCap100(t *testing.T) {
 	}
 }
 
+func TestClassifyNDFCPods(t *testing.T) {
+	tests := []struct {
+		name      string
+		podName   string
+		imageName string
+		wantClass string
+		wantAgent bool
+	}{
+		{"mcp server by image path", "mcpserver-5cbd97ff59-85rgm", "infra/mcp/mcpserver:1.0.0-3.0.40-3fa86d2", "mcp-server", true},
+		{"agent manager", "agentmgr-7c6ccbb9b4-tt9qx", "apps/cisco-ndfc/agentmgr:v12_6_0_267", "ai-agent", true},
+		{"sensei telemetry", "sensei-7dc5bf9f6b-qvxx8", "apps/cisco-nir/telemetry/sensei:6.9.1.21", "ml-ai", false},
+		{"genie telemetry", "genie-5d4b6bfd77-ddkvk", "apps/cisco-nir/telemetry/genie:6.9.1.21", "ml-ai", false},
+		{"hypershield", "hypershield-7b7c475664-4kqpd", "apps/cisco-ndfc/hypershield:v12_6_0_267", "ai-security", true},
+		{"nae config svc", "nae-configservice-pod-68f99dc46-zbt8z", "", "ml-ai", false},
+		{"palantir analytics", "palantir-pod-56b4c6dfbf-7t6zt", "", "ml-ai", false},
+		// Controls: these should NOT be classified as AI
+		{"cockroachdb", "cockroachdb-0", "cockroachdb/cockroach:v23.1.0", "database", false},
+		{"grafana", "prometheus-grafana-7bd9d56d76-c8tbj", "grafana/grafana:10.0", "monitoring", false},
+		{"authy stays auth", "authy-5bf464985f-clfpv", "", "auth-service", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			score := &types.PlexarScore{PodName: tt.podName, ImageName: tt.imageName}
+			got := Classify(score)
+			if got.Name != tt.wantClass {
+				t.Errorf("Classify(%s) = %s, want %s (reason: %s)", tt.podName, got.Name, tt.wantClass, got.Reason)
+			}
+			if isAgent := IsAgentClass(got.Label); isAgent != tt.wantAgent {
+				t.Errorf("IsAgentClass(%s) = %v, want %v", got.Label, isAgent, tt.wantAgent)
+			}
+		})
+	}
+}
+
 func TestTierRecalculation(t *testing.T) {
 	scores := []types.PlexarScore{
 		{PodName: "auth-svc-abc-123", ImageName: "keycloak:22", Total: 48, Tier: "medium"},

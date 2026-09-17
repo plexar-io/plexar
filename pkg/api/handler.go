@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/plexar-io/plexar/internal/types"
+	"github.com/plexar-io/plexar/pkg/agentsec"
 	"github.com/plexar-io/plexar/pkg/attackpath"
 	"github.com/plexar-io/plexar/pkg/classifier"
 	"github.com/plexar-io/plexar/pkg/compliance"
@@ -828,6 +829,9 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 
 	complianceResults := compliance.MapAll(scores, netPolCount, rbacFindings)
 
+	// Agent security analysis — identify MCP servers, agent pods, dependency chains
+	agentSummary := agentsec.Analyze(scores)
+
 	// Attach runtime insights to the result
 	insightsMu.RLock()
 	currentInsights := latestInsights
@@ -849,6 +853,7 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 		FlowSource:      flowSource,
 		RuntimeInsights: currentInsights,
 		AttackPaths:     currentAttackPaths,
+		AgentSecurity:   agentSummary,
 	}
 
 	finishScan(progress, clusterScore, len(scores))
