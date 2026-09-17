@@ -158,6 +158,20 @@ func (p *Profiler) profileViaExec(ctx context.Context, podName, namespace, conta
 	fileList := mapKeys(files)
 	pkgs := extractPackageNames(libList, fileList)
 
+	// Deep inspection: Go module dependencies from embedded build info
+	if containsLang(binaryLangs, "go") {
+		goMods := p.extractGoModules(ctx, podName, namespace, containerName)
+		for _, mod := range goMods {
+			pkgs = append(pkgs, mod)
+		}
+	}
+
+	// Deep inspection: Java fat JAR internals (Spring Boot, shaded JARs)
+	javaLibs := p.extractJavaFatJarDeps(ctx, podName, namespace, containerName, libs, files)
+	for _, lib := range javaLibs {
+		pkgs = append(pkgs, lib)
+	}
+
 	if len(pkgs) == 0 && len(libs) == 0 {
 		return empty, fmt.Errorf("no runtime data found")
 	}
@@ -194,6 +208,12 @@ func (p *Profiler) profileViaProcPIDs(podName, namespace, containerID string, pi
 	libList := mapKeys(libs)
 	fileList := mapKeys(files)
 	pkgs := extractPackageNames(libList, fileList)
+
+	// Go module extraction via host /proc for the first PID
+	if containsLang(binaryLangs, "go") && len(pids) > 0 {
+		goMods := p.extractGoModulesFromProc(pids[0])
+		pkgs = append(pkgs, goMods...)
+	}
 
 	return types.RuntimeProfile{
 		PodName:        podName,
@@ -398,6 +418,257 @@ func (p *Profiler) detectBinaryLanguage(pid int) string {
 	}
 
 	return ""
+}
+
+// extractGoModules reads the Go binary's embedded module dependency list.
+// Go 1.18+ embeds build info in the binary (same data as `go version -m <binary>`).
+// We extract it with `strings` + grep — no `go` binary needed in the container.
+func (p *Profiler) extractGoModules(ctx context.Context, podName, namespace, containerName string) []string {
+	// Go embeds module info as text lines like:
+	//   path	github.com/plexar-io/plexar
+	//   mod	github.com/plexar-io/plexar	(devel)
+	//   dep	github.com/spf13/cobra	v1.8.0	h1:...
+	//   dep	golang.org/x/net	v0.24.0	h1:...
+	// We read enough of the binary to capture this section.
+	out, err := p.client.ExecInPod(ctx, namespace, podName, containerName,
+		[]string{"/bin/sh", "-c", "strings /proc/1/exe 2>/dev/null | grep -E '^(dep|mod)\\s+' | head -200"})
+	if err != nil {
+		return nil
+	}
+
+	var modules []string
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Format: "dep\tmodule/path\tversion\thash" or "mod\tmodule/path\tversion"
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		kind := fields[0]
+		if kind != "dep" && kind != "mod" {
+			continue
+		}
+		modPath := fields[1]
+
+		// Extract the short package name from the module path
+		// e.g. "github.com/spf13/cobra" -> "cobra"
+		// e.g. "golang.org/x/net" -> "net"
+		// e.g. "google.golang.org/grpc" -> "grpc"
+		parts := strings.Split(modPath, "/")
+		shortName := parts[len(parts)-1]
+		// Also keep the last two segments for better matching
+		// "github.com/lib/pq" -> "pq" and "lib/pq"
+		if !seen[shortName] {
+			seen[shortName] = true
+			modules = append(modules, shortName)
+		}
+		if len(parts) >= 2 {
+			twoSeg := parts[len(parts)-2] + "/" + parts[len(parts)-1]
+			if !seen[twoSeg] {
+				seen[twoSeg] = true
+				modules = append(modules, twoSeg)
+			}
+		}
+		// Store full module path for exact matching against Trivy's Go SBOM
+		if !seen[modPath] {
+			seen[modPath] = true
+			modules = append(modules, modPath)
+		}
+	}
+
+	return modules
+}
+
+// extractJavaFatJarDeps inspects Java fat JARs (Spring Boot, shaded) to find
+// embedded library JARs inside BOOT-INF/lib/ or WEB-INF/lib/.
+// Without this, a fat JAR appears as a single dependency and all transitive
+// libraries inside it are invisible to the in-use matcher.
+func (p *Profiler) extractJavaFatJarDeps(ctx context.Context, podName, namespace, containerName string, libs, files map[string]bool) []string {
+	// Find JAR paths from /proc/1/cmdline (java -jar /app.jar) and open files
+	var jarPaths []string
+	cmdOut, cmdErr := p.client.ExecInPod(ctx, namespace, podName, containerName,
+		[]string{"/bin/sh", "-c", "cat /proc/1/cmdline 2>/dev/null | tr '\\0' '\\n'"})
+	if cmdErr == nil {
+		for _, arg := range strings.Split(cmdOut, "\n") {
+			arg = strings.TrimSpace(arg)
+			if strings.HasSuffix(strings.ToLower(arg), ".jar") {
+				jarPaths = append(jarPaths, arg)
+			}
+		}
+	}
+	// Also check open file descriptors for JARs
+	for f := range files {
+		if strings.HasSuffix(strings.ToLower(f), ".jar") {
+			jarPaths = append(jarPaths, f)
+		}
+	}
+	for f := range libs {
+		if strings.HasSuffix(strings.ToLower(f), ".jar") {
+			jarPaths = append(jarPaths, f)
+		}
+	}
+
+	if len(jarPaths) == 0 {
+		return nil
+	}
+
+	// Deduplicate JAR paths
+	seenJars := make(map[string]bool)
+	var uniqueJars []string
+	for _, jp := range jarPaths {
+		if !seenJars[jp] {
+			seenJars[jp] = true
+			uniqueJars = append(uniqueJars, jp)
+		}
+	}
+
+	// List contents of each JAR looking for embedded libs
+	// Spring Boot: BOOT-INF/lib/spring-core-6.1.5.jar
+	// War files: WEB-INF/lib/commons-io-2.11.jar
+	// Shaded JARs: META-INF/maven/groupId/artifactId/pom.properties
+	var deps []string
+	seen := make(map[string]bool)
+
+	for _, jar := range uniqueJars {
+		// Try unzip -l (most minimal containers have it), fall back to jar tf
+		out, err := p.client.ExecInPod(ctx, namespace, podName, containerName,
+			[]string{"/bin/sh", "-c", fmt.Sprintf(
+				"(unzip -l '%s' 2>/dev/null || jar tf '%s' 2>/dev/null) | grep -iE '(BOOT-INF/lib/|WEB-INF/lib/|META-INF/maven/).+\\.jar$' | head -500",
+				jar, jar)})
+		if err != nil {
+			// Try listing pom.properties for shaded JARs (no embedded .jar files)
+			out, err = p.client.ExecInPod(ctx, namespace, podName, containerName,
+				[]string{"/bin/sh", "-c", fmt.Sprintf(
+					"(unzip -l '%s' 2>/dev/null || jar tf '%s' 2>/dev/null) | grep 'pom.properties' | head -200",
+					jar, jar)})
+			if err != nil {
+				continue
+			}
+		}
+
+		for _, line := range strings.Split(out, "\n") {
+			line = strings.TrimSpace(line)
+
+			// Extract JAR filename from lines like:
+			// "  12345  2024-01-01 00:00   BOOT-INF/lib/spring-core-6.1.5.jar"
+			// or just: "BOOT-INF/lib/spring-core-6.1.5.jar"
+			var jarFile string
+			if strings.HasSuffix(line, ".jar") {
+				fields := strings.Fields(line)
+				jarFile = fields[len(fields)-1]
+			} else if strings.Contains(line, "pom.properties") {
+				// META-INF/maven/com.fasterxml.jackson.core/jackson-databind/pom.properties
+				// Extract artifactId from the path
+				parts := strings.Split(line, "/")
+				fields := strings.Fields(parts[len(parts)-1])
+				lastPart := fields[len(fields)-1]
+				if lastPart == "pom.properties" && len(parts) >= 2 {
+					artifactID := parts[len(parts)-2]
+					if !seen[artifactID] {
+						seen[artifactID] = true
+						deps = append(deps, artifactID)
+					}
+				}
+				continue
+			} else {
+				continue
+			}
+
+			// Parse JAR filename: spring-core-6.1.5.jar -> spring-core
+			base := filepath.Base(jarFile)
+			base = strings.TrimSuffix(base, ".jar")
+			name := stripJarVersion(base)
+			if name != "" && !seen[name] {
+				seen[name] = true
+				deps = append(deps, name)
+			}
+		}
+	}
+
+	return deps
+}
+
+// stripJarVersion removes the version suffix from a JAR base name.
+// "spring-core-6.1.5" -> "spring-core"
+// "jackson-databind-2.15.3" -> "jackson-databind"
+// "log4j-core-2.17.1" -> "log4j-core"
+func stripJarVersion(base string) string {
+	parts := strings.Split(base, "-")
+	for i := len(parts) - 1; i > 0; i-- {
+		if len(parts[i]) > 0 && parts[i][0] >= '0' && parts[i][0] <= '9' {
+			parts = parts[:i]
+		} else {
+			break
+		}
+	}
+	return strings.Join(parts, "-")
+}
+
+// extractGoModulesFromProc reads Go module info from a binary via host /proc.
+func (p *Profiler) extractGoModulesFromProc(pid int) []string {
+	exePath := filepath.Join(p.procRoot, fmt.Sprintf("%d", pid), "exe")
+
+	// Read a larger chunk of the binary to capture Go build info
+	f, err := os.Open(exePath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	// Go build info is typically within the first 2MB
+	buf := make([]byte, 2*1024*1024)
+	n, _ := f.Read(buf)
+	if n < 100 {
+		return nil
+	}
+	content := string(buf[:n])
+
+	var modules []string
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		if fields[0] != "dep" && fields[0] != "mod" {
+			continue
+		}
+		modPath := fields[1]
+		parts := strings.Split(modPath, "/")
+		shortName := parts[len(parts)-1]
+
+		if !seen[shortName] {
+			seen[shortName] = true
+			modules = append(modules, shortName)
+		}
+		if len(parts) >= 2 {
+			twoSeg := parts[len(parts)-2] + "/" + parts[len(parts)-1]
+			if !seen[twoSeg] {
+				seen[twoSeg] = true
+				modules = append(modules, twoSeg)
+			}
+		}
+		if !seen[modPath] {
+			seen[modPath] = true
+			modules = append(modules, modPath)
+		}
+	}
+	return modules
+}
+
+// containsLang checks if a language is in the binary langs list.
+func containsLang(langs []string, target string) bool {
+	for _, l := range langs {
+		if l == target {
+			return true
+		}
+	}
+	return false
 }
 
 // isRuntimeFile returns true if the file path is a loaded library or runtime artifact.
