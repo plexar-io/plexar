@@ -447,6 +447,9 @@
       <span class="mi">bug_report</span> CVE Explorer
       <span class="badge" id="badge-total-cves">0</span>
     </div>
+    <div class="nav-item" onclick="showPage('cvelookup')">
+      <span class="mi">search</span> CVE Lookup
+    </div>
 
     <div class="nav-item nav-more-toggle" onclick="toggleMore()">
       <span class="mi">more_horiz</span> More
@@ -917,6 +920,33 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════ -->
+  <!-- PAGE: CVE LOOKUP               -->
+  <!-- ═══════════════════════════════ -->
+  <div class="page" id="page-cvelookup">
+    <div class="topbar">
+      <h1>CVE Lookup</h1>
+      <div class="topbar-right">
+        <input class="btn" id="cve-lookup-input" type="text" placeholder="Enter CVE ID (e.g. CVE-2024-38816)" style="width:320px;font-family:monospace" onkeydown="if(event.key==='Enter')lookupCVE()">
+        <button class="btn btn-primary" onclick="lookupCVE()" style="background:var(--primary);color:#fff;border:none;font-weight:500">
+          <span class="mi" style="font-size:16px;vertical-align:text-bottom">search</span> Lookup
+        </button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div style="text-align:center;padding:40px 20px;color:var(--text-secondary)" id="cve-lookup-empty">
+        <span class="mi" style="font-size:64px;display:block;margin-bottom:16px;color:var(--text-disabled)">policy</span>
+        <h2 style="color:var(--text-primary);margin-bottom:8px">CVE Triage</h2>
+        <p>Paste a CVE ID to see which pods are affected, whether the vulnerability<br>is in-use at runtime, and get a fix recommendation based on blast radius.</p>
+        <p style="margin-top:12px;font-size:12px">Works with scan data loaded via <code>--load</code> or from live scans.</p>
+      </div>
+      <div id="cve-lookup-loading" style="display:none;text-align:center;padding:48px">
+        <span class="cve-spinner"></span> <span style="color:var(--text-secondary)">Looking up CVE...</span>
+      </div>
+      <div id="cve-lookup-result" style="display:none"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -1038,6 +1068,7 @@ function showPage(pageId) {
   if (MORE_PAGES.includes(pageId)) setMoreOpen(true);
   if (pageId === 'topology') setTimeout(renderTopology, 100);
   if (pageId === 'cves' && cveData.length === 0) loadCVEs();
+  if (pageId === 'cvelookup') setTimeout(() => document.getElementById('cve-lookup-input').focus(), 100);
 }
 
 function setMoreOpen(open) {
@@ -2803,6 +2834,199 @@ function exportCVEsCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = 'plexar-cves.csv';
   a.click();
+}
+
+// ═══════════════════════════════════════
+// CVE LOOKUP
+// ═══════════════════════════════════════
+async function lookupCVE() {
+  const input = document.getElementById('cve-lookup-input');
+  const cveId = input.value.trim().toUpperCase();
+  if (!cveId || !cveId.startsWith('CVE-')) {
+    input.style.borderColor = 'var(--error)';
+    setTimeout(() => input.style.borderColor = '', 1500);
+    return;
+  }
+
+  document.getElementById('cve-lookup-empty').style.display = 'none';
+  document.getElementById('cve-lookup-result').style.display = 'none';
+  document.getElementById('cve-lookup-loading').style.display = 'block';
+
+  try {
+    const res = await fetch('/api/cve/' + encodeURIComponent(cveId));
+    const data = await res.json();
+    document.getElementById('cve-lookup-loading').style.display = 'none';
+
+    if (!data.found) {
+      document.getElementById('cve-lookup-result').style.display = 'block';
+      document.getElementById('cve-lookup-result').innerHTML = `
+        <div class="card" style="text-align:center;padding:40px">
+          <span class="mi" style="font-size:48px;color:var(--text-disabled)">search_off</span>
+          <h2 style="margin:12px 0 8px;color:var(--text-primary)">${esc(cveId)} Not Found</h2>
+          <p style="color:var(--text-secondary)">This CVE was not detected in any scanned image in the current cluster.</p>
+          <p style="color:var(--text-disabled);font-size:12px;margin-top:8px">Tip: Ensure a full scan has been run. Only CVEs from scanned images are indexed.</p>
+        </div>`;
+      return;
+    }
+
+    renderCVELookupResult(data);
+  } catch (e) {
+    document.getElementById('cve-lookup-loading').style.display = 'none';
+    document.getElementById('cve-lookup-result').style.display = 'block';
+    document.getElementById('cve-lookup-result').innerHTML = `
+      <div class="card" style="text-align:center;padding:40px">
+        <span class="mi" style="font-size:48px;color:var(--error)">error</span>
+        <h2 style="margin:12px 0;color:var(--error)">Lookup Failed</h2>
+        <p style="color:var(--text-secondary)">${esc(e.message)}</p>
+      </div>`;
+  }
+}
+
+function renderCVELookupResult(data) {
+  const el = document.getElementById('cve-lookup-result');
+  el.style.display = 'block';
+
+  const sevColors = { CRITICAL: 'var(--error-light)', HIGH: 'var(--warning)', MEDIUM: 'var(--primary-light)', LOW: 'var(--text-secondary)' };
+  const sevBg = { CRITICAL: 'var(--error-bg)', HIGH: 'var(--warning-bg)', MEDIUM: 'var(--primary-bg)', LOW: 'rgba(255,255,255,0.04)' };
+  const recColors = { 'PATCH NOW': 'var(--error-light)', 'PATCH': 'var(--warning)', 'MONITOR': 'var(--primary-light)', 'DEPRIORITIZE': 'var(--success)' };
+  const recBg = { 'PATCH NOW': 'var(--error-bg)', 'PATCH': 'var(--warning-bg)', 'MONITOR': 'var(--primary-bg)', 'DEPRIORITIZE': 'var(--success-bg)' };
+  const recIcons = { 'PATCH NOW': 'emergency', 'PATCH': 'build', 'MONITOR': 'visibility', 'DEPRIORITIZE': 'schedule' };
+
+  const s = data.summary;
+  const nistUrl = 'https://nvd.nist.gov/vuln/detail/' + encodeURIComponent(data.id);
+  const refs = (data.references || []).slice(0, 5);
+  const desc = data.description || 'No description available.';
+  const overrideStatus = data.override ? data.override.status : '';
+  const overrideNote = data.override ? data.override.note : '';
+
+  let html = `
+  <!-- Recommendation Banner -->
+  <div class="card" style="border-left:4px solid ${recColors[data.recommendation] || 'var(--border)'};margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:16px;padding:4px 0">
+      <span class="mi" style="font-size:36px;color:${recColors[data.recommendation] || 'var(--text-secondary)'}">${recIcons[data.recommendation] || 'info'}</span>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+          <span style="font-size:20px;font-weight:700;color:${recColors[data.recommendation]}">${esc(data.recommendation)}</span>
+          <span style="background:${sevBg[data.severity]};color:${sevColors[data.severity]};padding:3px 12px;border-radius:12px;font-size:12px;font-weight:600">${data.severity}</span>
+          <span style="font-family:monospace;font-size:14px;font-weight:600">${esc(data.id)}</span>
+          <span style="color:var(--text-secondary);font-size:13px">CVSS ${data.cvss.toFixed(1)}</span>
+          ${data.exploitType ? '<span style="background:var(--purple-bg);color:var(--purple);padding:2px 8px;border-radius:8px;font-size:11px">' + esc(data.exploitType) + '</span>' : ''}
+        </div>
+        <div style="color:var(--text-secondary);font-size:13px">${esc(data.recommendationReason)}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select id="cve-override-select" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px"
+          onchange="setCVEOverride('${esc(data.id)}', this.value)">
+          <option value="" ${!overrideStatus ? 'selected' : ''}>No Override</option>
+          <option value="accepted" ${overrideStatus === 'accepted' ? 'selected' : ''}>Accepted Risk</option>
+          <option value="deferred" ${overrideStatus === 'deferred' ? 'selected' : ''}>Deferred</option>
+          <option value="false-positive" ${overrideStatus === 'false-positive' ? 'selected' : ''}>False Positive</option>
+        </select>
+      </div>
+    </div>
+    ${overrideStatus ? '<div style="margin-top:8px;padding:8px 12px;background:var(--bg-surface);border-radius:6px;font-size:12px;color:var(--text-secondary)">Override: <strong style="color:var(--warning)">' + esc(overrideStatus) + '</strong>' + (overrideNote ? ' — ' + esc(overrideNote) : '') + '</div>' : ''}
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="stat-card accent-error">
+      <div class="stat-icon red"><span class="mi">dns</span></div>
+      <div class="stat-label">Affected Pods</div>
+      <div class="stat-value">${s.totalAffectedPods}</div>
+    </div>
+    <div class="stat-card ${s.inUsePods > 0 ? 'accent-error' : 'accent-success'}">
+      <div class="stat-icon ${s.inUsePods > 0 ? 'red' : 'green'}"><span class="mi">memory</span></div>
+      <div class="stat-label">In-Use Pods</div>
+      <div class="stat-value">${s.inUsePods}</div>
+    </div>
+    <div class="stat-card accent-warning">
+      <div class="stat-icon orange"><span class="mi">hub</span></div>
+      <div class="stat-label">Max Blast Radius</div>
+      <div class="stat-value">${s.maxBlastRadius}<span class="stat-sub"> svc</span></div>
+    </div>
+    <div class="stat-card ${s.internetExposed ? 'accent-error' : 'accent-success'}">
+      <div class="stat-icon ${s.internetExposed ? 'red' : 'green'}"><span class="mi">public</span></div>
+      <div class="stat-label">Internet Exposed</div>
+      <div class="stat-value">${s.internetExposed ? 'YES' : 'NO'}</div>
+    </div>
+  </div>
+
+  <!-- Description & References -->
+  <div class="grid-2" style="margin-bottom:16px">
+    <div class="card">
+      <div class="card-header"><h2>Description</h2></div>
+      <p style="color:var(--text-secondary);font-size:13px;line-height:1.7">${esc(desc)}</p>
+      ${data.publishedDate ? '<p style="margin-top:10px;font-size:12px;color:var(--text-disabled)">Published: ' + esc(data.publishedDate) + '</p>' : ''}
+    </div>
+    <div class="card">
+      <div class="card-header"><h2>References</h2></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <a href="${nistUrl}" target="_blank" rel="noopener" style="color:var(--primary-light);font-size:12px;word-break:break-all">NVD: ${esc(data.id)}</a>
+        ${refs.map(r => '<a href="' + esc(r) + '" target="_blank" rel="noopener" style="color:var(--primary-light);font-size:12px;word-break:break-all">' + esc(r.length > 80 ? r.substring(0, 80) + '...' : r) + '</a>').join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- Affected Pods Table -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Affected Pods (${data.affectedPods.length})</h2>
+    </div>
+    <div style="max-height:500px;overflow-y:auto">
+      <table class="data-table">
+        <thead><tr>
+          <th>Pod</th>
+          <th>Namespace</th>
+          <th>Package</th>
+          <th>Installed</th>
+          <th>Fixed</th>
+          <th>In Use</th>
+          <th>Blast Radius</th>
+          <th>Internet</th>
+          <th>NetPol</th>
+          <th>Risk Score</th>
+        </tr></thead>
+        <tbody>`;
+
+  for (const pod of data.affectedPods) {
+    const inUseTag = pod.inUse
+      ? (pod.confidence >= 1.0
+        ? '<span style="background:var(--error-bg);color:var(--error-light);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">IN USE</span>'
+        : '<span style="background:var(--warning-bg);color:var(--warning);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">LIKELY</span>')
+      : '<span style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">DORMANT</span>';
+    const tierColor = pod.podTier === 'critical' ? 'var(--error-light)' : pod.podTier === 'high' ? 'var(--warning)' : 'var(--text-secondary)';
+
+    html += `<tr>
+      <td style="font-weight:500;font-size:12px" title="${esc(pod.imageName)}">${esc(shortPod(pod.podName))}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${esc(pod.namespace)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(pod.package)}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${esc(pod.installedVersion)}</td>
+      <td style="font-family:monospace;font-size:11px;color:${pod.fixedVersion ? 'var(--success)' : 'var(--text-disabled)'}">${pod.fixedVersion || 'No fix'}</td>
+      <td>${inUseTag}</td>
+      <td style="font-weight:600;color:${pod.blastRadius > 50 ? 'var(--error-light)' : pod.blastRadius > 10 ? 'var(--warning)' : 'var(--text-secondary)'}">${pod.blastRadius} svc</td>
+      <td>${pod.internetExposed ? '<span style="color:var(--error-light);font-weight:600">YES</span>' : '<span style="color:var(--success)">No</span>'}</td>
+      <td>${pod.hasNetworkPolicy ? '<span style="color:var(--success)">Yes</span>' : '<span style="color:var(--error-light);font-weight:600">NONE</span>'}</td>
+      <td><span style="color:${tierColor};font-weight:600">${pod.podScore}</span><span style="color:var(--text-disabled);font-size:11px">/${pod.podTier}</span></td>
+    </tr>`;
+  }
+
+  html += `</tbody></table></div></div>`;
+  el.innerHTML = html;
+}
+
+async function setCVEOverride(cveId, status) {
+  try {
+    const note = status ? prompt('Optional note for this override:') || '' : '';
+    await fetch('/api/cve/' + encodeURIComponent(cveId) + '/override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note })
+    });
+    // Re-lookup to refresh the display
+    lookupCVE();
+  } catch (e) {
+    console.warn('Override failed:', e);
+  }
 }
 
 // ═══════════════════════════════════════

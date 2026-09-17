@@ -410,6 +410,180 @@ func runServe(cmd *cobra.Command, args []string) error {
 		})
 	})
 
+	// ── CVE Lookup — deep-dive on a single CVE across the cluster ──
+	// Tracks user overrides (accepted / deferred / false-positive) in memory.
+	var (
+		cveOverrides   = map[string]CVEOverride{}
+		cveOverridesMu sync.RWMutex
+	)
+
+	mux.HandleFunc("/api/cve/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Parse path: /api/cve/CVE-2024-38816 or /api/cve/CVE-2024-38816/override
+		path := strings.TrimPrefix(r.URL.Path, "/api/cve/")
+		parts := strings.SplitN(path, "/", 2)
+		cveID := strings.ToUpper(strings.TrimSpace(parts[0]))
+		isOverride := len(parts) > 1 && parts[1] == "override"
+
+		if cveID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "CVE ID required"})
+			return
+		}
+
+		// Handle override POST
+		if isOverride {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				Status string `json:"status"` // accepted, deferred, false-positive
+				Note   string `json:"note"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+				return
+			}
+			validStatuses := map[string]bool{"accepted": true, "deferred": true, "false-positive": true, "": true}
+			if !validStatuses[body.Status] {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "status must be: accepted, deferred, false-positive, or empty to clear"})
+				return
+			}
+			cveOverridesMu.Lock()
+			if body.Status == "" {
+				delete(cveOverrides, cveID)
+			} else {
+				cveOverrides[cveID] = CVEOverride{Status: body.Status, Note: body.Note, SetAt: time.Now()}
+			}
+			cveOverridesMu.Unlock()
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok", "cve": cveID, "override": body.Status})
+			return
+		}
+
+		// GET — lookup
+		result := getCachedResult()
+		if result == nil {
+			json.NewEncoder(w).Encode(map[string]string{"error": "no scan data"})
+			return
+		}
+
+		type AffectedPod struct {
+			PodName          string  `json:"podName"`
+			Namespace        string  `json:"namespace"`
+			ImageName        string  `json:"imageName"`
+			Package          string  `json:"package"`
+			InstalledVersion string  `json:"installedVersion"`
+			FixedVersion     string  `json:"fixedVersion"`
+			InUse            bool    `json:"inUse"`
+			Confidence       float64 `json:"confidence"`
+			BlastRadius      int     `json:"blastRadius"`
+			InternetExposed  bool    `json:"internetExposed"`
+			HasNetworkPolicy bool    `json:"hasNetworkPolicy"`
+			PodScore         int     `json:"podScore"`
+			PodTier          string  `json:"podTier"`
+		}
+
+		var affected []AffectedPod
+		var matchedCVE *types.CVEInfo
+		for _, score := range result.Scores {
+			cves := score.Vulns.AllCVEs
+			if len(cves) == 0 {
+				cves = score.Vulns.TopCVEs
+			}
+			for _, c := range cves {
+				if strings.EqualFold(c.ID, cveID) {
+					if matchedCVE == nil {
+						cp := c
+						matchedCVE = &cp
+					}
+					affected = append(affected, AffectedPod{
+						PodName:          score.PodName,
+						Namespace:        score.Namespace,
+						ImageName:        score.ImageName,
+						Package:          c.Package,
+						InstalledVersion: c.InstalledVersion,
+						FixedVersion:     c.FixedVersion,
+						InUse:            c.InUse,
+						Confidence:       c.Confidence,
+						BlastRadius:      len(score.Blast.ReachableTargets),
+						InternetExposed:  score.Blast.InternetAccess,
+						HasNetworkPolicy: score.Blast.HasNetworkPolicy,
+						PodScore:         score.Total,
+						PodTier:          score.Tier,
+					})
+				}
+			}
+		}
+
+		if matchedCVE == nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      cveID,
+				"found":   false,
+				"message": "CVE not found in current scan data",
+			})
+			return
+		}
+
+		// Compute summary
+		inUsePods := 0
+		maxBlast := 0
+		internetExposed := false
+		for _, a := range affected {
+			if a.InUse {
+				inUsePods++
+			}
+			if a.BlastRadius > maxBlast {
+				maxBlast = a.BlastRadius
+			}
+			if a.InternetExposed {
+				internetExposed = true
+			}
+		}
+
+		// Auto-score recommendation
+		rec, reason := scoreCVERecommendation(matchedCVE, inUsePods, maxBlast, internetExposed, len(affected))
+
+		// Check for user override
+		cveOverridesMu.RLock()
+		override, hasOverride := cveOverrides[cveID]
+		cveOverridesMu.RUnlock()
+
+		resp := map[string]interface{}{
+			"id":            matchedCVE.ID,
+			"found":         true,
+			"severity":      matchedCVE.Severity,
+			"cvss":          matchedCVE.CVSS,
+			"description":   matchedCVE.Description,
+			"publishedDate": matchedCVE.PublishedDate,
+			"exploitType":   matchedCVE.ExploitType,
+			"references":    matchedCVE.References,
+			"affectedPods":  affected,
+			"summary": map[string]interface{}{
+				"totalAffectedPods": len(affected),
+				"inUsePods":         inUsePods,
+				"maxBlastRadius":    maxBlast,
+				"internetExposed":   internetExposed,
+			},
+			"recommendation":       rec,
+			"recommendationReason": reason,
+		}
+		if hasOverride {
+			resp["override"] = override
+		}
+
+		// Try NVD enrichment if description is missing
+		if matchedCVE.Description == "" {
+			go enrichFromNVD(cveID) // fire-and-forget for next lookup
+		}
+
+		json.NewEncoder(w).Encode(resp)
+	})
+
 	mux.HandleFunc("/api/settings/weights", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(scorer.ActiveWeights())
@@ -869,4 +1043,61 @@ func runServe(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stderr, "\nPress Ctrl+C to stop\n")
 
 	return server.ListenAndServe()
+}
+
+// CVEOverride stores a user's triage decision for a specific CVE
+type CVEOverride struct {
+	Status string    `json:"status"` // accepted, deferred, false-positive
+	Note   string    `json:"note"`
+	SetAt  time.Time `json:"setAt"`
+}
+
+// scoreCVERecommendation produces an auto-scored recommendation
+func scoreCVERecommendation(cve *types.CVEInfo, inUsePods, maxBlast int, internetExposed bool, totalAffected int) (string, string) {
+	sevOrder := map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+	sev := sevOrder[cve.Severity]
+
+	// PATCH NOW: critical/high + in-use + high blast radius or internet exposed
+	if sev >= 3 && inUsePods > 0 && (maxBlast > 50 || internetExposed) {
+		parts := []string{cve.Severity + " severity", fmt.Sprintf("in-use in %d pod(s)", inUsePods)}
+		if maxBlast > 0 {
+			parts = append(parts, fmt.Sprintf("%d reachable services", maxBlast))
+		}
+		if internetExposed {
+			parts = append(parts, "internet exposed")
+		}
+		return "PATCH NOW", strings.Join(parts, ", ")
+	}
+
+	// PATCH: critical/high + in-use but lower blast
+	if sev >= 3 && inUsePods > 0 {
+		return "PATCH", fmt.Sprintf("%s severity, in-use in %d pod(s), blast radius %d", cve.Severity, inUsePods, maxBlast)
+	}
+
+	// PATCH: critical + not confirmed in-use but wide blast
+	if sev >= 4 && maxBlast > 50 {
+		return "PATCH", fmt.Sprintf("CRITICAL severity, %d affected pod(s), blast radius %d — in-use status unconfirmed", totalAffected, maxBlast)
+	}
+
+	// MONITOR: medium severity or not in-use
+	if sev >= 2 && (inUsePods == 0 || sev == 2) {
+		if inUsePods == 0 {
+			return "MONITOR", fmt.Sprintf("%s severity, not confirmed in-use in any pod — verify runtime profile", cve.Severity)
+		}
+		return "MONITOR", fmt.Sprintf("MEDIUM severity, in-use in %d pod(s)", inUsePods)
+	}
+
+	// DEPRIORITIZE: low severity or dormant + isolated
+	if cve.FixedVersion == "" {
+		return "DEPRIORITIZE", fmt.Sprintf("%s severity, no fix available yet", cve.Severity)
+	}
+	return "DEPRIORITIZE", fmt.Sprintf("%s severity, not in-use, limited blast radius", cve.Severity)
+}
+
+// enrichFromNVD fetches CVE details from NVD API (best-effort, non-blocking)
+func enrichFromNVD(cveID string) {
+	// NVD API v2 is rate-limited (5 req/30s without key). This is fire-and-forget
+	// to enrich the cached scan data for the next lookup.
+	// For now this is a no-op placeholder — the scan data from Trivy already has
+	// descriptions for most CVEs. Full NVD enrichment can be added later.
 }
