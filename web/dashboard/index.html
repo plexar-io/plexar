@@ -1053,6 +1053,7 @@ function shortPod(name) {
   return parts.length > 2 ? parts.slice(0, -2).join('-') : name;
 }
 function esc(s) { if (s == null) return ''; const d=document.createElement('div'); d.textContent=String(s); return d.innerHTML; }
+function blastCount(b) { return b.reachableCount != null ? b.reachableCount : (b.reachableTargets||[]).length; }
 
 // ═══════════════════════════════════════
 // NAVIGATION
@@ -1275,7 +1276,7 @@ function renderDashboard() {
   // Top-risk table
   const top5 = scores.slice(0, 5);
   document.getElementById('dash-top-pods').innerHTML = top5.map((s, i) => {
-    const reach = (s.blast.reachableTargets||[]).length;
+    const reach = blastCount(s.blast);
     const inet = s.blast.internetAccess ? ' + inet' : '';
     const wc = s.workloadClass || '—';
     const mult = s.riskMultiplier && s.riskMultiplier !== 1 ? ` <span style="color:var(--warning);font-size:10px">×${s.riskMultiplier.toFixed(1)}</span>` : '';
@@ -1731,7 +1732,7 @@ function renderTopology() {
     else {
       const sc = topoScores.find(s => s.podName === d.id);
       tooltip.innerHTML = `<b>${d.label}</b> (${d.tier})<br>Score: ${d.score}`
-        + (sc ? `<br>Configured: ${(sc.blast.configuredTargets||[]).length} &middot; Reachable: ${(sc.blast.reachableTargets||[]).length}` : '');
+        + (sc ? `<br>Configured: ${(sc.blast.configuredTargets||[]).length} &middot; Reachable: ${blastCount(sc.blast)}` : '');
     }
     const conn = new Set([d.id]);
     links.forEach(l => {
@@ -1783,12 +1784,19 @@ function selectTopoPod(podName) {
   // Blast list
   const targets = score.blast.reachableTargets || [];
   const dataStores = score.blast.dataStoreAccess || [];
-  document.getElementById('topo-blast-list').innerHTML = targets.map(t => {
-    const isDs = dataStores.includes(t);
-    const icon = isDs ? 'storage' : 'arrow_forward';
-    const tag = isDs ? '<span class="tag tag-danger">DATA STORE</span>' : '';
-    return `<div class="blast-item"><span class="mi" style="color:var(--error-light)">${icon}</span><div class="target">${esc(t)}</div><div>${tag}</div></div>`;
-  }).join('') + (score.blast.internetAccess ? `<div class="blast-item"><span class="mi" style="color:var(--error-light)">public</span><div class="target">0.0.0.0/0 &mdash; full internet</div><div><span class="tag tag-danger">EXFILTRATE</span></div></div>` : '');
+  const blastEl = document.getElementById('topo-blast-list');
+  if (targets.length > 0) {
+    blastEl.innerHTML = targets.map(t => {
+      const isDs = dataStores.includes(t);
+      const icon = isDs ? 'storage' : 'arrow_forward';
+      const tag = isDs ? '<span class="tag tag-danger">DATA STORE</span>' : '';
+      return `<div class="blast-item"><span class="mi" style="color:var(--error-light)">${icon}</span><div class="target">${esc(t)}</div><div>${tag}</div></div>`;
+    }).join('') + (score.blast.internetAccess ? `<div class="blast-item"><span class="mi" style="color:var(--error-light)">public</span><div class="target">0.0.0.0/0 &mdash; full internet</div><div><span class="tag tag-danger">EXFILTRATE</span></div></div>` : '');
+  } else {
+    const rc = blastCount(score.blast);
+    blastEl.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:8px">${rc} reachable service${rc!==1?'s':''}</div>`
+      + (score.blast.internetAccess ? `<div class="blast-item"><span class="mi" style="color:var(--error-light)">public</span><div class="target">0.0.0.0/0 &mdash; full internet</div><div><span class="tag tag-danger">EXFILTRATE</span></div></div>` : '');
+  }
 
   // CVE list (filtered by In Use toggle)
   const allCves = score.vulns.topCVEs || [];
@@ -1831,7 +1839,7 @@ function renderPods() {
   if (nsFilter) scores = scores.filter(s => s.namespace === nsFilter);
 
   document.getElementById('pods-tbody').innerHTML = scores.map((s, i) => {
-    const reach = (s.blast.reachableTargets||[]).length;
+    const reach = blastCount(s.blast);
     const inet = s.blast.internetAccess;
     const netpol = s.blast.hasNetworkPolicy;
     const wc = s.workloadClass || 'General';
@@ -2491,7 +2499,7 @@ async function exportPDF() {
 
   // Pod risk table
   const podRows = scores.slice(0, 15).map((s, i) => {
-    const reach = (s.blast.reachableTargets||[]).length;
+    const reach = blastCount(s.blast);
     return `<tr><td>${i+1}</td><td>${esc(shortPod(s.podName))}</td><td>${s.vulns.critical}</td><td>${s.vulns.high}</td><td>${reach}</td><td>${s.blast.internetAccess?'Yes':'No'}</td><td>${s.blast.hasNetworkPolicy?'Yes':'No'}</td><td style="font-weight:700">${s.total}</td><td>${s.tier.toUpperCase()}</td></tr>`;
   }).join('');
 

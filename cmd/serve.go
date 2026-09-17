@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -196,7 +198,71 @@ func runServe(cmd *cobra.Command, args []string) error {
 			json.NewEncoder(w).Encode(map[string]string{"status": "pending", "message": "Initial scan in progress"})
 			return
 		}
-		json.NewEncoder(w).Encode(result)
+		// Return a lightweight copy: replace blast.reachableTargets with just the count.
+		// The full list is 300KB+ and the dashboard only uses the count.
+		type lightBlast struct {
+			ReachableCount     int      `json:"reachableCount"`
+			ConfiguredTargets  []string `json:"configuredTargets,omitempty"`
+			InternetAccess     bool     `json:"internetAccess"`
+			HasNetworkPolicy   bool     `json:"hasNetworkPolicy"`
+			UnrestrictedEgress bool     `json:"unrestrictedEgress"`
+			DataStoreAccess    []string `json:"dataStoreAccess,omitempty"`
+		}
+		type lightScore struct {
+			PodName          string                 `json:"podName"`
+			Namespace        string                 `json:"namespace"`
+			ImageName        string                 `json:"imageName"`
+			Total            int                    `json:"total"`
+			Tier             string                 `json:"tier"`
+			CVEScore         int                    `json:"cveScore"`
+			BlastScore       int                    `json:"blastScore"`
+			PermScore        int                    `json:"permScore"`
+			PolicyGapScore   int                    `json:"policyGapScore"`
+			SensitivityScore int                    `json:"sensitivityScore"`
+			WorkloadClass    string                 `json:"workloadClass,omitempty"`
+			RiskMultiplier   float64                `json:"riskMultiplier,omitempty"`
+			BaseScore        int                    `json:"baseScore,omitempty"`
+			Vulns            types.VulnSummary      `json:"vulns"`
+			Blast            lightBlast             `json:"blast"`
+			Permissions      types.PodPermissions   `json:"permissions"`
+			Recommendations  []types.Recommendation `json:"recommendations,omitempty"`
+			Roast            string                 `json:"roast,omitempty"`
+			Labels           map[string]string      `json:"labels,omitempty"`
+		}
+		light := make([]lightScore, len(result.Scores))
+		for i, s := range result.Scores {
+			light[i] = lightScore{
+				PodName: s.PodName, Namespace: s.Namespace, ImageName: s.ImageName,
+				Total: s.Total, Tier: s.Tier,
+				CVEScore: s.CVEScore, BlastScore: s.BlastScore, PermScore: s.PermScore,
+				PolicyGapScore: s.PolicyGapScore, SensitivityScore: s.SensitivityScore,
+				WorkloadClass: s.WorkloadClass, RiskMultiplier: s.RiskMultiplier, BaseScore: s.BaseScore,
+				Vulns: s.Vulns, Permissions: s.Permissions,
+				Recommendations: s.Recommendations, Roast: s.Roast, Labels: s.Labels,
+				Blast: lightBlast{
+					ReachableCount:     len(s.Blast.ReachableTargets),
+					ConfiguredTargets:  s.Blast.ConfiguredTargets,
+					InternetAccess:     s.Blast.InternetAccess,
+					HasNetworkPolicy:   s.Blast.HasNetworkPolicy,
+					UnrestrictedEgress: s.Blast.UnrestrictedEgress,
+					DataStoreAccess:    s.Blast.DataStoreAccess,
+				},
+			}
+		}
+		out := map[string]interface{}{
+			"clusterName":     result.ClusterName,
+			"namespace":       result.Namespace,
+			"scanTime":        result.ScanTime,
+			"totalPods":       result.TotalPods,
+			"clusterScore":    result.ClusterScore,
+			"networkPolicies": result.NetworkPolicies,
+			"scores":          light,
+			"warnings":        result.Warnings,
+			"compliance":      result.Compliance,
+			"runtimeInsights": result.RuntimeInsights,
+			"attackPaths":     result.AttackPaths,
+		}
+		json.NewEncoder(w).Encode(out)
 	})
 
 	mux.HandleFunc("/api/scan/status", func(w http.ResponseWriter, r *http.Request) {
@@ -890,7 +956,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	handler := authMiddleware(auth.NamespaceScopedMiddleware()(mux))
+	handler := gzipMiddleware(authMiddleware(auth.NamespaceScopedMiddleware()(mux)))
 
 	// Prometheus metrics server (separate port)
 	go func() {
@@ -1101,3 +1167,25 @@ func enrichFromNVD(cveID string) {
 	// For now this is a no-op placeholder — the scan data from Trivy already has
 	// descriptions for most CVEs. Full NVD enrichment can be added later.
 }
+
+// gzipMiddleware compresses responses for clients that accept gzip.
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		defer gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) { return g.Writer.Write(b) }
