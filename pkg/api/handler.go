@@ -254,7 +254,7 @@ func (s *spinner) draw(frame int) {
 	braille := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	dot := braille[frame%len(braille)]
 
-	fmt.Fprintf(s.w, "%s  %s%s%s %s%s%s  %s%d/%d%s  %s%s%s  %s%s%s\n",
+	fmt.Fprintf(s.w, "%s  %s%s%s %s%s%s  %sphase %d/%d%s  %s%s%s  %s%s%s\n",
 		ansiClearLn,
 		ansiGreen, bar, ansiReset,
 		ansiCyan, dot, ansiReset,
