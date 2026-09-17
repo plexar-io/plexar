@@ -183,14 +183,16 @@ func (c *CRIOResolver) Export(ctx context.Context, imageName string) (tarPath st
 	defer exportCancel()
 
 	cmd := exec.CommandContext(exportCtx, "/bin/sh", "-c",
-		fmt.Sprintf("skopeo copy containers-storage:%s docker-archive:%s 2>/dev/null", fullRef, tarPath))
+		fmt.Sprintf("skopeo copy containers-storage:%s docker-archive:%s 2>&1", fullRef, tarPath))
 
-	if output, err := cmd.CombinedOutput(); err != nil {
+	output, cmdErr := cmd.CombinedOutput()
+	if cmdErr != nil {
 		os.Remove(tarPath)
+		errMsg := strings.TrimSpace(string(output))
 		if exportCtx.Err() == context.DeadlineExceeded {
 			return "", nil, fmt.Errorf("skopeo export timed out for %s (>15min, image may be too large)", fullRef)
 		}
-		return "", nil, fmt.Errorf("skopeo export failed for %s: %w (%s)", fullRef, err, strings.TrimSpace(string(output)))
+		return "", nil, fmt.Errorf("skopeo export failed for %s: %w (%s)", fullRef, cmdErr, errMsg)
 	}
 
 	cleanup = func() { os.Remove(tarPath) }

@@ -107,20 +107,26 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 
 		// Cache miss — run trivy
 		if vulns == nil {
-			t.log("   [%d/%d] %-40s scanning...", i+1, total, shortImage(target.imageName))
+			isCRIO := t.effectiveImageSource() == ImageSourceCRIO
+			if isCRIO {
+				t.log("   [%d/%d] %-40s", i+1, total, shortImage(target.imageName))
+			} else {
+				t.log("   [%d/%d] %-40s scanning...", i+1, total, shortImage(target.imageName))
+			}
 			start := time.Now()
 
 			var scanned []types.CVEInfo
 			var scanErr error
 
-			if t.effectiveImageSource() == ImageSourceCRIO {
+			if isCRIO {
 				scanned, scanErr = t.scanViaCRIO(ctx, trivyPath, target.imageName)
 			} else {
 				scanned, scanErr = runTrivy(ctx, trivyPath, target.imageName)
 			}
 
 			if scanErr != nil {
-				t.log(" ✗ failed (%v)\n", scanErr)
+				elapsed := time.Since(start).Round(time.Second)
+				t.log(" ✗ failed after %s (%v)\n", elapsed, scanErr)
 				summary.ScanError = scanErr.Error()
 				continue
 			}
@@ -225,12 +231,21 @@ func (t *TrivyScanner) scanViaCRIO(ctx context.Context, trivyPath, imageName str
 		t.crioResolver = &CRIOResolver{}
 	}
 
+	t.log(" [export]")
+	exportStart := time.Now()
 	tarPath, cleanup, err := t.crioResolver.Export(ctx, imageName)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 
+	// Log the exported tar size so we can gauge how long trivy will take
+	if fi, statErr := os.Stat(tarPath); statErr == nil {
+		sizeMB := fi.Size() / (1024 * 1024)
+		t.log(" %dMB (%s)", sizeMB, time.Since(exportStart).Round(time.Second))
+	}
+
+	t.log(" [trivy]")
 	return runTrivyInput(ctx, trivyPath, tarPath, imageName)
 }
 
