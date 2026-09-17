@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -41,9 +40,10 @@ func DetectImageSource() string {
 // CRIOResolver maps pod image names to CRI-O containers-storage references
 // and exports them as tarballs for Trivy scanning.
 type CRIOResolver struct {
-	mapping map[string]string // normalized short name -> full CRI-O storage reference
-	once    sync.Once
-	initErr error
+	mapping    map[string]string // normalized short name -> full CRI-O storage reference
+	once       sync.Once
+	initErr    error
+	imageCount int // number of images indexed from CRI-O storage
 }
 
 // crictl images -o json output structure
@@ -89,7 +89,8 @@ func (c *CRIOResolver) Init() error {
 			}
 		}
 
-		log.Printf("[crio] Indexed %d images from CRI-O storage", len(result.Images))
+		// Logged via scanner progress writer, not log.Printf, to avoid polluting the TUI
+		c.imageCount = len(result.Images)
 	})
 	return c.initErr
 }
