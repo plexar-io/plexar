@@ -192,12 +192,15 @@ type trivyResult struct {
 	Results []struct {
 		Target          string `json:"Target"`
 		Vulnerabilities []struct {
-			VulnerabilityID  string `json:"VulnerabilityID"`
-			Severity         string `json:"Severity"`
-			PkgName          string `json:"PkgName"`
-			InstalledVersion string `json:"InstalledVersion"`
-			FixedVersion     string `json:"FixedVersion"`
-			PublishedDate    string `json:"PublishedDate"`
+			VulnerabilityID  string   `json:"VulnerabilityID"`
+			Severity         string   `json:"Severity"`
+			PkgName          string   `json:"PkgName"`
+			InstalledVersion string   `json:"InstalledVersion"`
+			FixedVersion     string   `json:"FixedVersion"`
+			PublishedDate    string   `json:"PublishedDate"`
+			Title            string   `json:"Title"`
+			Description      string   `json:"Description"`
+			References       []string `json:"References"`
 			CVSS             map[string]struct {
 				V3Score float64 `json:"V3Score"`
 			} `json:"CVSS"`
@@ -401,6 +404,8 @@ func parseTrivyOutput(cmd *exec.Cmd, imageLabel string) ([]types.CVEInfo, error)
 				InstalledVersion: v.InstalledVersion,
 				FixedVersion:     v.FixedVersion,
 				PublishedDate:    v.PublishedDate,
+				Description:      v.Title,
+				References:       v.References,
 			})
 		}
 	}

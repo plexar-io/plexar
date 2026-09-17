@@ -334,18 +334,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 		inUseFilter := r.URL.Query().Get("inuse") // "true" or "false"
 
 		type CVERow struct {
-			PodName    string  `json:"podName"`
-			Namespace  string  `json:"namespace"`
-			ImageName  string  `json:"imageName"`
-			ID         string  `json:"id"`
-			Severity   string  `json:"severity"`
-			CVSS       float64 `json:"cvss"`
-			Package    string  `json:"package"`
-			Installed  string  `json:"installedVersion"`
-			Fixed      string  `json:"fixedVersion"`
-			InUse      bool    `json:"inUse"`
-			Confidence float64 `json:"confidence"`
-			Published  string  `json:"publishedDate"`
+			PodName     string   `json:"podName"`
+			Namespace   string   `json:"namespace"`
+			ImageName   string   `json:"imageName"`
+			ID          string   `json:"id"`
+			Severity    string   `json:"severity"`
+			CVSS        float64  `json:"cvss"`
+			Package     string   `json:"package"`
+			Installed   string   `json:"installedVersion"`
+			Fixed       string   `json:"fixedVersion"`
+			InUse       bool     `json:"inUse"`
+			Confidence  float64  `json:"confidence"`
+			Published   string   `json:"publishedDate"`
+			Description string   `json:"description,omitempty"`
+			References  []string `json:"references,omitempty"`
 		}
 
 		var rows []CVERow
@@ -375,18 +377,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 					continue
 				}
 				rows = append(rows, CVERow{
-					PodName:    score.PodName,
-					Namespace:  score.Namespace,
-					ImageName:  score.ImageName,
-					ID:         c.ID,
-					Severity:   c.Severity,
-					CVSS:       c.CVSS,
-					Package:    c.Package,
-					Installed:  c.InstalledVersion,
-					Fixed:      c.FixedVersion,
-					InUse:      c.InUse,
-					Confidence: c.Confidence,
-					Published:  c.PublishedDate,
+					PodName:     score.PodName,
+					Namespace:   score.Namespace,
+					ImageName:   score.ImageName,
+					ID:          c.ID,
+					Severity:    c.Severity,
+					CVSS:        c.CVSS,
+					Package:     c.Package,
+					Installed:   c.InstalledVersion,
+					Fixed:       c.FixedVersion,
+					InUse:       c.InUse,
+					Confidence:  c.Confidence,
+					Published:   c.PublishedDate,
+					Description: c.Description,
+					References:  c.References,
 				})
 			}
 		}

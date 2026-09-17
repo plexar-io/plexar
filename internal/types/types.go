@@ -61,17 +61,18 @@ type VulnSummary struct {
 
 // CVEInfo represents a single CVE finding
 type CVEInfo struct {
-	ID               string  `json:"id"`
-	Severity         string  `json:"severity"`
-	CVSS             float64 `json:"cvss"`
-	Package          string  `json:"package"`
-	InstalledVersion string  `json:"installedVersion"`
-	FixedVersion     string  `json:"fixedVersion,omitempty"`
-	PublishedDate    string  `json:"publishedDate,omitempty"`
-	Description      string  `json:"description,omitempty"`
-	ExploitType      string  `json:"exploitType,omitempty"` // ssrf, rce, deserialization, sqli, path_traversal, auth_bypass, lfi, info_disclosure
-	InUse            bool    `json:"inUse"`
-	Confidence       float64 `json:"confidence,omitempty"` // 1.0=exact, 0.7=fuzzy, 0.5=conservative
+	ID               string   `json:"id"`
+	Severity         string   `json:"severity"`
+	CVSS             float64  `json:"cvss"`
+	Package          string   `json:"package"`
+	InstalledVersion string   `json:"installedVersion"`
+	FixedVersion     string   `json:"fixedVersion,omitempty"`
+	PublishedDate    string   `json:"publishedDate,omitempty"`
+	Description      string   `json:"description,omitempty"`
+	ExploitType      string   `json:"exploitType,omitempty"` // ssrf, rce, deserialization, sqli, path_traversal, auth_bypass, lfi, info_disclosure
+	References       []string `json:"references,omitempty"`
+	InUse            bool     `json:"inUse"`
+	Confidence       float64  `json:"confidence,omitempty"` // 1.0=exact, 0.7=fuzzy, 0.5=conservative
 }
 
 // ObservedFlow represents a single observed network flow from Hubble
