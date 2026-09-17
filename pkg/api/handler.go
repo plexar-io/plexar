@@ -309,22 +309,49 @@ func resetScanProgress() {
 }
 
 // spinnerWriter is an io.Writer that feeds scanner progress to the spinner's detail line.
-// It captures the last non-empty line written and updates the spinner in real time.
+// It captures the last non-empty line written and updates the spinner in real time,
+// AND accumulates completed lines so they can be printed persistently after the
+// spinner stops (otherwise they're lost when the spinner clears its drawn area).
 type spinnerWriter struct {
-	sp *spinner
+	sp    *spinner
+	lines []string // accumulated completed log lines
+	buf   string   // partial line buffer (no newline yet)
 }
 
 func (sw *spinnerWriter) Write(p []byte) (n int, err error) {
-	s := strings.TrimSpace(string(p))
-	if s != "" {
-		// Keep only the last line (multi-line writes happen when a scan finishes)
-		lines := strings.Split(s, "\n")
-		last := strings.TrimSpace(lines[len(lines)-1])
-		if last != "" {
-			sw.sp.SetDetail(last)
+	sw.buf += string(p)
+
+	// Process complete lines (ending with \n)
+	for {
+		idx := strings.IndexByte(sw.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := strings.TrimSpace(sw.buf[:idx])
+		sw.buf = sw.buf[idx+1:]
+		if line != "" {
+			sw.lines = append(sw.lines, line)
 		}
 	}
+
+	// Update spinner detail with the latest content (complete or partial)
+	latest := strings.TrimSpace(sw.buf)
+	if latest == "" && len(sw.lines) > 0 {
+		latest = sw.lines[len(sw.lines)-1]
+	}
+	if latest != "" {
+		sw.sp.SetDetail(latest)
+	}
+
 	return len(p), nil
+}
+
+// Flush prints all accumulated log lines to the given writer.
+// Called after the spinner stops so the per-image progress persists in logs.
+func (sw *spinnerWriter) Flush(w io.Writer) {
+	for _, line := range sw.lines {
+		fmt.Fprintf(w, "  %s\n", line)
+	}
 }
 
 // finishScan prints the final summary after all phases complete.
@@ -574,16 +601,26 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 
 	// Route scanner's per-image progress into the spinner's detail line
 	// so it appears inside the animated TUI instead of being overwritten.
+	var sw *spinnerWriter
 	if ts, ok := vulnSource.(*scanner.TrivyScanner); ok {
-		ts.Progress = &spinnerWriter{sp: sp}
+		sw = &spinnerWriter{sp: sp}
+		ts.Progress = sw
 	}
 
 	vulns, err := vulnSource.ScanNamespace(vulnCtx, client, namespace)
 	if err != nil {
 		sp.stop(fmt.Sprintf("🔍 Scanning vulnerabilities ✗ %v", err))
+		if sw != nil {
+			sw.Flush(progress)
+		}
 		return nil, fmt.Errorf("CVE scan failed: %w", err)
 	}
 	sp.stop(fmt.Sprintf("🔍 Found %d pods with vulnerability data", len(vulns)))
+
+	// Print per-image scan details so they persist in logs
+	if sw != nil {
+		sw.Flush(progress)
+	}
 
 	// Network + permissions analysis uses a separate timeout
 	analysisCtx, analysisCancel := context.WithTimeout(context.Background(), 60*time.Second)
