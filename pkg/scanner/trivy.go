@@ -360,6 +360,10 @@ func runTrivyInput(ctx context.Context, trivyPath, tarPath, originalImage string
 		"--scanners", "vuln",
 		"--quiet",
 		"--no-progress",
+		// Skip large non-package directories to reduce memory usage on enterprise images.
+		// Trivy tries to parse every file for language-specific deps — docs, logs, and
+		// test data in large images can push memory past node limits and trigger OOM kill.
+		"--skip-dirs", "/usr/share/doc,/usr/share/man,/var/log,/var/cache,/tmp",
 	}
 
 	// Only force offline mode if a local DB already exists (air-gapped setup).
@@ -368,8 +372,17 @@ func runTrivyInput(ctx context.Context, trivyPath, tarPath, originalImage string
 		args = append(args, "--skip-db-update", "--offline-scan")
 	}
 
-	cmd := exec.CommandContext(ctx, trivyPath, args...)
-	return parseTrivyOutput(cmd, originalImage)
+	// Per-image scan timeout: 10 minutes. Enterprise Java images with thousands
+	// of JARs can take a while, but >10min usually means Trivy is stuck or swapping.
+	scanCtx, scanCancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer scanCancel()
+
+	cmd := exec.CommandContext(scanCtx, trivyPath, args...)
+	cves, err := parseTrivyOutput(cmd, originalImage)
+	if err != nil && scanCtx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("trivy scan timed out for %s (>10min)", originalImage)
+	}
+	return cves, err
 }
 
 func parseTrivyOutput(cmd *exec.Cmd, imageLabel string) ([]types.CVEInfo, error) {

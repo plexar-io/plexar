@@ -177,8 +177,9 @@ func (c *CRIOResolver) Export(ctx context.Context, imageName string) (tarPath st
 	h := sha256.Sum256([]byte(fullRef))
 	tarPath = fmt.Sprintf("/tmp/plexar-crio-%x.tar", h[:8])
 
-	// Per-image timeout: 5 minutes for skopeo export (large images can be >1GB)
-	exportCtx, exportCancel := context.WithTimeout(ctx, 5*time.Minute)
+	// Per-image timeout: 15 minutes for skopeo export.
+	// Enterprise images (Java app servers, NDFC) can be 1-2GB and take 10+ min.
+	exportCtx, exportCancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer exportCancel()
 
 	cmd := exec.CommandContext(exportCtx, "/bin/sh", "-c",
@@ -187,7 +188,7 @@ func (c *CRIOResolver) Export(ctx context.Context, imageName string) (tarPath st
 	if output, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tarPath)
 		if exportCtx.Err() == context.DeadlineExceeded {
-			return "", nil, fmt.Errorf("skopeo export timed out for %s (>5min, image may be too large)", fullRef)
+			return "", nil, fmt.Errorf("skopeo export timed out for %s (>15min, image may be too large)", fullRef)
 		}
 		return "", nil, fmt.Errorf("skopeo export failed for %s: %w (%s)", fullRef, err, strings.TrimSpace(string(output)))
 	}
