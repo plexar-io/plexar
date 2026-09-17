@@ -172,19 +172,23 @@ func checkVulnReports(ctx context.Context, client *k8s.Client, namespace string)
 func checkTrivyTooling(imageSrc string) []CheckResult {
 	var results []CheckResult
 
-	// 1. Trivy binary
+	// 1. Trivy binary — check PATH/common locations, then auto-download if missing
 	trivyPath, err := scanner.FindTrivy()
 	if err != nil {
-		results = append(results, CheckResult{
-			Name: "Trivy binary",
-			Message: "trivy binary not found.\n" +
-				"     Install:\n" +
-				"       macOS:  brew install trivy\n" +
-				"       Linux:  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin\n" +
-				"       Or set: TRIVY_PATH=/path/to/trivy\n" +
-				"     Skip:    --vuln-source=none (score on blast radius + permissions only)",
-		})
-		return results // nothing else is meaningful without trivy
+		// Attempt auto-download before failing the preflight
+		trivyPath, err = scanner.EnsureTrivy(os.Stderr)
+		if err != nil {
+			results = append(results, CheckResult{
+				Name: "Trivy binary",
+				Message: "trivy binary not found and auto-download failed: " + err.Error() + "\n" +
+					"     Install manually:\n" +
+					"       macOS:  brew install trivy\n" +
+					"       Linux:  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin\n" +
+					"       Or set: TRIVY_PATH=/path/to/trivy\n" +
+					"     Skip:    --vuln-source=none (score on blast radius + permissions only)",
+			})
+			return results // nothing else is meaningful without trivy
+		}
 	}
 	results = append(results, CheckResult{Name: "Trivy binary", Passed: true, Message: "found at " + trivyPath})
 

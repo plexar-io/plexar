@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Reflex Demo Environment Setup ──
+# ── Plexar Demo Environment Setup ──
 # Creates a kind cluster with intentionally vulnerable workloads
-# for demonstrating Reflex blast radius scanning and SOC 2 compliance.
+# for demonstrating Plexar blast radius scanning and SOC 2 compliance.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLUSTER_NAME="reflex-demo"
+CLUSTER_NAME="plexar-demo"
 NAMESPACE="acme-prod"
 
 RED='\033[0;31m'
@@ -23,7 +23,7 @@ fail()  { echo -e "${RED}❌${NC} $*"; exit 1; }
 # ── Preflight checks ──
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Reflex Demo Environment Setup"
+echo "  Plexar Demo Environment Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -107,27 +107,27 @@ echo ""
 
 if [ "${TRIVY_AVAILABLE}" = true ]; then
     echo "  # Full scan with CVE detection"
-    echo "  reflex scan --namespace ${NAMESPACE}"
+    echo "  plexar scan --namespace ${NAMESPACE}"
     echo ""
     echo "  # Generate SOC 2 PDF report"
-    echo "  reflex scan --namespace ${NAMESPACE} -o soc2-report.pdf"
+    echo "  plexar scan --namespace ${NAMESPACE} -o soc2-report.pdf"
 else
     echo "  # Scan without Trivy (blast radius + RBAC only)"
-    echo "  reflex scan --namespace ${NAMESPACE} --vuln-source none"
+    echo "  plexar scan --namespace ${NAMESPACE} --vuln-source none"
     echo ""
     echo "  # Generate SOC 2 PDF report"
-    echo "  reflex scan --namespace ${NAMESPACE} --vuln-source none -o soc2-report.pdf"
+    echo "  plexar scan --namespace ${NAMESPACE} --vuln-source none -o soc2-report.pdf"
 fi
 
 echo ""
 echo "  # Start continuous monitoring with dashboard"
-echo "  reflex serve --namespace ${NAMESPACE} --scan-interval 1m"
+echo "  plexar serve --namespace ${NAMESPACE} --scan-interval 1m"
 echo ""
 echo "  # Generate NetworkPolicies for unprotected pods"
-echo "  reflex generate netpol --namespace ${NAMESPACE}"
+echo "  plexar generate netpol --namespace ${NAMESPACE}"
 echo ""
 echo "  # JSON output for CI/CD"
-echo "  reflex scan --namespace ${NAMESPACE} -o json | jq '.scores[] | {pod: .podName, score: .total, tier}'"
+echo "  plexar scan --namespace ${NAMESPACE} -o json | jq '.scores[] | {pod: .podName, score: .total, tier}'"
 echo ""
 echo "  # Tear down when done"
 echo "  kind delete cluster --name ${CLUSTER_NAME}"

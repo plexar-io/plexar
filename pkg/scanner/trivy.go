@@ -51,10 +51,14 @@ func (t *TrivyScanner) log(format string, args ...interface{}) {
 const scanWorkers = 4
 
 func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, namespace string) ([]types.VulnSummary, error) {
-	// Verify trivy is available — check PATH, then common locations
+	// Verify trivy is available — check PATH, common locations, then auto-download
 	trivyPath, err := findTrivy()
 	if err != nil {
-		return nil, fmt.Errorf("trivy binary not found. Install: brew install trivy (macOS) or curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh (Linux). Or use --vuln-source=none to skip CVE scanning")
+		// Auto-download trivy if not found anywhere
+		trivyPath, err = ensureTrivy(t.Progress)
+		if err != nil {
+			return nil, fmt.Errorf("trivy not found and auto-download failed: %w\n\n  Manual install:\n    macOS:  brew install trivy\n    Linux:  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh\n  Or skip: --vuln-source=none", err)
+		}
 	}
 
 	// List pods in namespace
@@ -338,7 +342,8 @@ func (t *TrivyScanner) scanViaCRIO(ctx context.Context, trivyPath, imageName str
 // 1. TRIVY_PATH env var
 // 2. Standard PATH lookup
 // 3. Same directory as the running plexar binary
-// 4. Common fallback paths (/usr/local/bin, ~/trivy, /home/*/trivy)
+// 4. Managed install at ~/.plexar/bin/trivy
+// 5. Common fallback paths (/usr/local/bin, ~/trivy, /home/*/trivy)
 func findTrivy() (string, error) {
 	// 1. Explicit env override
 	if p := os.Getenv("TRIVY_PATH"); p != "" {
@@ -360,7 +365,14 @@ func findTrivy() (string, error) {
 		}
 	}
 
-	// 4. Common locations
+	// 4. Managed install (previously auto-downloaded)
+	if p, err := managedTrivyPath(); err == nil {
+		if info, serr := os.Stat(p); serr == nil && !info.IsDir() {
+			return p, nil
+		}
+	}
+
+	// 5. Common locations
 	fallbacks := []string{
 		"/usr/local/bin/trivy",
 		"/usr/bin/trivy",
