@@ -28,6 +28,8 @@ type TrivyScanner struct {
 	// ImageSource controls how Trivy accesses container images.
 	// "auto" (default) detects the runtime; "crio" forces CRI-O mode.
 	ImageSource string
+	// MaxImages limits the number of unique images to scan (0 = no limit).
+	MaxImages int
 
 	crioResolver *CRIOResolver
 }
@@ -109,6 +111,12 @@ func (t *TrivyScanner) ScanNamespace(ctx context.Context, client *k8s.Client, na
 		}
 		imageResults[target.imageName] = nil // placeholder — will be filled by worker
 		imagesToScan = append(imagesToScan, target.imageName)
+	}
+
+	// Apply --max-images limit
+	if t.MaxImages > 0 && len(imagesToScan) > t.MaxImages {
+		t.log("   ⚡ --max-images %d: scanning only %d of %d unique images\n", t.MaxImages, t.MaxImages, len(imagesToScan))
+		imagesToScan = imagesToScan[:t.MaxImages]
 	}
 
 	uniqueTotal := len(imagesToScan) + len(diskCached)

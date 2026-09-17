@@ -49,6 +49,7 @@ var (
 	vulnSource     string
 	imageSource    string
 	freshScan      bool
+	maxImages      int
 	scanVantaToken string
 	scanDrataKey   string
 )
@@ -85,6 +86,7 @@ func init() {
 	scanCmd.Flags().StringVar(&vulnSource, "vuln-source", "trivy", "Vulnerability source: trivy, trivy-operator, none")
 	scanCmd.Flags().StringVar(&imageSource, "image-source", "auto", "Image source: auto, crio, containerd, docker")
 	scanCmd.Flags().BoolVar(&freshScan, "fresh", false, "Force re-scan images (ignore cache)")
+	scanCmd.Flags().IntVar(&maxImages, "max-images", 0, "Limit unique images to scan (0 = all, useful for quick testing)")
 	scanCmd.Flags().StringVar(&scanVantaToken, "vanta-token", "", "Vanta API token — push evidence after scan")
 	scanCmd.Flags().StringVar(&scanDrataKey, "drata-key", "", "Drata API key — push evidence after scan")
 }
@@ -94,7 +96,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	progress := os.Stderr
 
 	// Configure vulnerability source with progress and cache options
-	opts := scanner.SourceOptions{Fresh: freshScan, ImageSource: imageSource}
+	opts := scanner.SourceOptions{Fresh: freshScan, ImageSource: imageSource, MaxImages: maxImages}
 	opts.Progress = progress
 	source, err := scanner.NewSource(vulnSource, opts)
 	if err != nil {

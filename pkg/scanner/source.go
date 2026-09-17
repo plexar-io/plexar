@@ -35,6 +35,9 @@ type SourceOptions struct {
 	// ImageSource controls how Trivy accesses container images.
 	// "auto" (default) probes the node; "crio" forces CRI-O export via skopeo.
 	ImageSource string
+	// MaxImages limits the number of unique images to scan (0 = no limit).
+	// Useful for quick testing on large clusters.
+	MaxImages int
 }
 
 // NewSource creates a VulnSource by name.
@@ -49,7 +52,7 @@ func NewSource(name string, opts ...SourceOptions) (VulnSource, error) {
 
 	switch name {
 	case SourceTrivy, "":
-		return &TrivyScanner{Progress: opt.Progress, Fresh: opt.Fresh, ImageSource: opt.ImageSource}, nil
+		return &TrivyScanner{Progress: opt.Progress, Fresh: opt.Fresh, ImageSource: opt.ImageSource, MaxImages: opt.MaxImages}, nil
 	case SourceTrivyOperator:
 		return &TrivyOperatorScanner{}, nil
 	case SourceNone:
