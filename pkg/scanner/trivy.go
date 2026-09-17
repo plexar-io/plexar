@@ -466,10 +466,20 @@ func runTrivyInput(ctx context.Context, trivyPath, tarPath, originalImage string
 		"--skip-dirs", "/usr/share/doc,/usr/share/man,/var/log,/var/cache,/tmp",
 	}
 
-	// Only force offline mode if a local DB already exists (air-gapped setup).
-	// Otherwise let Trivy download the DB — the host may have internet access.
-	if _, _, err := TrivyDBInfo(); err == nil {
-		args = append(args, "--skip-db-update", "--offline-scan")
+	// If the main vuln DB already exists, skip re-downloading it (saves time).
+	// But do NOT use --offline-scan: trivy needs network access to download the
+	// Java DB on first use. Without it, Java vulnerabilities are silently skipped
+	// and enterprise Java images (like NDFC) appear to have 0 CVEs.
+	if dbPath, _, dbErr := TrivyDBInfo(); dbErr == nil {
+		args = append(args, "--skip-db-update")
+
+		// Check if Java DB exists — if so, also skip that download
+		// DB is at <cache>/db/trivy.db, Java DB at <cache>/java-db/trivy-java.db
+		cacheDir := filepath.Dir(filepath.Dir(dbPath))
+		javaDB := filepath.Join(cacheDir, "java-db", "trivy-java.db")
+		if _, serr := os.Stat(javaDB); serr == nil {
+			args = append(args, "--skip-java-db-update")
+		}
 	}
 
 	// Per-image scan timeout: 10 minutes. Enterprise Java images with thousands
