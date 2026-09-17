@@ -145,7 +145,16 @@ type spinner struct {
 	total     int
 	done      chan struct{}
 	startTime time.Time
-	drawn     int // lines drawn (for clearing)
+	drawn     int    // lines drawn (for clearing)
+	detail    string // current sub-step detail (e.g. "[export] 1432MB (3m)")
+	mu        sync.Mutex
+}
+
+// SetDetail updates the sub-step detail shown below the progress bar.
+func (s *spinner) SetDetail(detail string) {
+	s.mu.Lock()
+	s.detail = detail
+	s.mu.Unlock()
 }
 
 var activeScanStart time.Time
@@ -254,6 +263,15 @@ func (s *spinner) draw(frame int) {
 		ansiDim, phaseElapsed, ansiReset)
 	lines++
 
+	// Sub-step detail (e.g. current image export/scan progress)
+	s.mu.Lock()
+	detail := s.detail
+	s.mu.Unlock()
+	if detail != "" {
+		fmt.Fprintf(s.w, "%s  %s%s%s\n", ansiClearLn, ansiDim, detail, ansiReset)
+		lines++
+	}
+
 	// Overall elapsed
 	fmt.Fprintf(s.w, "%s  %s◈ plexar scan%s  %selapsed: %s%s\n",
 		ansiClearLn,
@@ -288,6 +306,25 @@ func (s *spinner) stop(result string) {
 func resetScanProgress() {
 	activeScanPhase = 0
 	activeScanStart = time.Time{}
+}
+
+// spinnerWriter is an io.Writer that feeds scanner progress to the spinner's detail line.
+// It captures the last non-empty line written and updates the spinner in real time.
+type spinnerWriter struct {
+	sp *spinner
+}
+
+func (sw *spinnerWriter) Write(p []byte) (n int, err error) {
+	s := strings.TrimSpace(string(p))
+	if s != "" {
+		// Keep only the last line (multi-line writes happen when a scan finishes)
+		lines := strings.Split(s, "\n")
+		last := strings.TrimSpace(lines[len(lines)-1])
+		if last != "" {
+			sw.sp.SetDetail(last)
+		}
+	}
+	return len(p), nil
 }
 
 // finishScan prints the final summary after all phases complete.
@@ -532,6 +569,13 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	defer vulnCancel()
 
 	sp := startSpinner(progress, fmt.Sprintf("Scanning vulnerabilities (source: %s)", vulnSource.Name()))
+
+	// Route scanner's per-image progress into the spinner's detail line
+	// so it appears inside the animated TUI instead of being overwritten.
+	if ts, ok := vulnSource.(*scanner.TrivyScanner); ok {
+		ts.Progress = &spinnerWriter{sp: sp}
+	}
+
 	vulns, err := vulnSource.ScanNamespace(vulnCtx, client, namespace)
 	if err != nil {
 		sp.stop(fmt.Sprintf("🔍 Scanning vulnerabilities ✗ %v", err))
