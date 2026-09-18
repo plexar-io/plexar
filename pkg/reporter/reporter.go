@@ -149,6 +149,116 @@ func PrintReport(w io.Writer, result *types.ScanResult) {
 			}
 			fmt.Fprintln(w)
 		}
+
+		// Delegation Chain Exposure
+		if as.DelegationSummary != nil && as.DelegationSummary.TotalChains > 0 {
+			printDelegationChains(w, as)
+		}
+	}
+}
+
+// printDelegationChains renders the delegation chain exposure analysis.
+// This shows whether scope narrows (safe) or widens (exposed) at each hop
+// in agent -> MCP -> service chains.
+func printDelegationChains(w io.Writer, as *types.AgentSecuritySummary) {
+	ds := as.DelegationSummary
+	fmt.Fprintf(w, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Fprintf(w, "  ⛓  Delegation Chain Exposure\n")
+	fmt.Fprintf(w, "  Chains: %d | Scope violations: %d | Auth gaps: %d | Critical: %d\n",
+		ds.TotalChains, ds.ScopeViolations, ds.AuthGaps, ds.CriticalChains)
+	if ds.SecretsReachable > 0 || ds.DataStores > 0 {
+		fmt.Fprintf(w, "  Terminal targets: %d secrets/admin | %d data stores\n",
+			ds.SecretsReachable, ds.DataStores)
+	}
+	fmt.Fprintln(w)
+
+	for _, chain := range as.DelegationChains {
+		exposureIcon := "  "
+		switch chain.Exposure {
+		case "critical":
+			exposureIcon = "!!"
+		case "high":
+			exposureIcon = "! "
+		case "medium":
+			exposureIcon = "* "
+		}
+
+		// Chain header with arrow path
+		var hopNames []string
+		for _, hop := range chain.Hops {
+			hopNames = append(hopNames, shortName(hop.PodName))
+		}
+		chainPath := strings.Join(hopNames, " -> ")
+		if len(chain.TerminalTargets) > 0 {
+			// Show most critical terminal target
+			topTarget := chain.TerminalTargets[0]
+			chainPath += " -> [" + topTarget + "]"
+		}
+		fmt.Fprintf(w, "  %s %s  (score: %d, %s)\n", exposureIcon, chainPath, chain.ExposureScore, strings.ToUpper(chain.Exposure))
+
+		// Hop-by-hop scope analysis
+		fmt.Fprintf(w, "    %-20s %-12s %-14s %-12s %s\n",
+			"HOP", "BLAST", "RBAC", "AUTH", "SCOPE")
+		fmt.Fprintf(w, "    %s\n", strings.Repeat("-", 72))
+
+		for i, hop := range chain.Hops {
+			name := shortName(hop.PodName)
+			if len(name) > 19 {
+				name = name[:19]
+			}
+
+			blast := fmt.Sprintf("%d svc", hop.BlastRadius)
+			rbac := fmt.Sprintf("%s(%d)", hop.RBACSA, hop.RBACRisk)
+			if len(rbac) > 13 {
+				rbac = rbac[:13]
+			}
+
+			auth := hop.AuthBoundary
+
+			scope := ""
+			if i == 0 {
+				scope = "entry"
+			} else {
+				var parts []string
+				if hop.BlastDelta > 0 {
+					parts = append(parts, fmt.Sprintf("blast +%d", hop.BlastDelta))
+				} else if hop.BlastDelta < 0 {
+					parts = append(parts, fmt.Sprintf("blast %d", hop.BlastDelta))
+				} else {
+					parts = append(parts, "blast =")
+				}
+				if hop.RBACDelta > 0 {
+					parts = append(parts, fmt.Sprintf("RBAC +%d", hop.RBACDelta))
+				} else if hop.RBACDelta < 0 {
+					parts = append(parts, fmt.Sprintf("RBAC %d", hop.RBACDelta))
+				}
+				scope = strings.Join(parts, ", ")
+
+				if hop.BlastDelta > 0 || hop.RBACDelta > 0 {
+					scope += " WIDENS"
+				} else if hop.BlastDelta < 0 || hop.RBACDelta < 0 {
+					scope += " narrows"
+				}
+			}
+
+			fmt.Fprintf(w, "    %-20s %-12s %-14s %-12s %s\n",
+				name, blast, rbac, auth, scope)
+		}
+
+		// Violations
+		if len(chain.Violations) > 0 {
+			fmt.Fprintln(w)
+			for _, v := range chain.Violations {
+				fmt.Fprintf(w, "    !! %s\n", v)
+			}
+		}
+
+		// Fix
+		if chain.Fix != "" {
+			fmt.Fprintf(w, "    >> Fix: %s\n", chain.Fix)
+		}
+
+		fmt.Fprintln(w)
 	}
 }
 

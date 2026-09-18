@@ -110,6 +110,16 @@ func Analyze(scores []types.PlexarScore) *types.AgentSecuritySummary {
 	return summary
 }
 
+// AnalyzeWithRBAC runs the full agent analysis including delegation chains.
+// Call this when RBAC data is available for scope attenuation checks.
+func AnalyzeWithRBAC(scores []types.PlexarScore, rbacFindings []types.RBACFinding) *types.AgentSecuritySummary {
+	summary := Analyze(scores)
+	chains, delSummary := AnalyzeDelegation(scores, rbacFindings)
+	summary.DelegationChains = chains
+	summary.DelegationSummary = delSummary
+	return summary
+}
+
 // buildAgentContext creates the base AgentContext for a pod
 func buildAgentContext(score *types.PlexarScore, isMCP bool) *types.AgentContext {
 	ctx := &types.AgentContext{

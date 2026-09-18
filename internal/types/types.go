@@ -446,6 +446,49 @@ type AgentSecuritySummary struct {
 	UnprotectedAgents int                   `json:"unprotectedAgents"` // agents without NetworkPolicy
 	AgentDependencies []AgentDependencyEdge `json:"agentDependencies,omitempty"`
 	HighRiskFindings  []string              `json:"highRiskFindings,omitempty"`
+	DelegationChains  []DelegationChain     `json:"delegationChains,omitempty"`
+	DelegationSummary *DelegationSummary    `json:"delegationSummary,omitempty"`
+}
+
+// DelegationChain represents a full agent → MCP → service → target chain
+// and measures whether scope narrows (safe) or widens (exposed) at each hop.
+type DelegationChain struct {
+	ID              string          `json:"id"`
+	Hops            []DelegationHop `json:"hops"`
+	TerminalTargets []string        `json:"terminalTargets,omitempty"` // secrets, databases, auth services at the end
+	Exposure        string          `json:"exposure"`                  // critical, high, medium, low
+	ExposureScore   int             `json:"exposureScore"`             // 0-100
+	Violations      []string        `json:"violations"`                // human-readable scope violation descriptions
+	Fix             string          `json:"fix,omitempty"`             // recommended fix to break the chain
+}
+
+// DelegationHop is a single step in a delegation chain
+type DelegationHop struct {
+	PodName        string `json:"podName"`
+	Namespace      string `json:"namespace"`
+	WorkloadClass  string `json:"workloadClass"`
+	BlastRadius    int    `json:"blastRadius"` // reachable services count
+	RBACRisk       int    `json:"rbacRisk"`    // RBAC risk score (0-100)
+	RBACSA         string `json:"rbacSA"`      // service account name
+	HasNetPolicy   bool   `json:"hasNetPolicy"`
+	InternetAccess bool   `json:"internetAccess"`
+	InUseCVEs      int    `json:"inUseCVEs"`
+	CriticalCVEs   int    `json:"criticalCVEs"`
+	// Scope change relative to previous hop
+	BlastDelta   int    `json:"blastDelta"`   // positive = widens, negative = narrows
+	RBACDelta    int    `json:"rbacDelta"`    // positive = privilege increases (bad)
+	AuthBoundary string `json:"authBoundary"` // "none", "networkpolicy", "mtls", "token"
+}
+
+// DelegationSummary aggregates delegation chain analysis
+type DelegationSummary struct {
+	TotalChains      int `json:"totalChains"`
+	CriticalChains   int `json:"criticalChains"`
+	ScopeViolations  int `json:"scopeViolations"` // hops where scope widens
+	AuthGaps         int `json:"authGaps"`        // hops with no auth boundary
+	MaxChainDepth    int `json:"maxChainDepth"`
+	SecretsReachable int `json:"secretsReachable"` // chains that terminate at secrets
+	DataStores       int `json:"dataStores"`       // chains that reach databases
 }
 
 // LicenseInfo describes the enterprise license

@@ -453,6 +453,13 @@ func RecomputeAttackPaths(result *types.ScanResult) *types.AttackPathSummary {
 	latestInsights = insights
 	insightsMu.Unlock()
 
+	// Recompute agent security with delegation chains
+	if len(result.RBACFindings) > 0 {
+		result.AgentSecurity = agentsec.AnalyzeWithRBAC(result.Scores, result.RBACFindings)
+	} else {
+		result.AgentSecurity = agentsec.Analyze(result.Scores)
+	}
+
 	// Attach to the result so JSON export includes them
 	result.RuntimeInsights = insights
 	result.AttackPaths = summary
@@ -481,9 +488,15 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 	var allScores []types.PlexarScore
 	var allWarnings []string
 	var allCompliance []types.ComplianceResult
+	var allRBACFindings []types.RBACFinding
+	var allRuntimeProfiles []types.RuntimeProfile
 	totalPods := 0
 	totalNetPol := 0
+	totalCVEs := 0
+	inUseCVEs := 0
 	clusterName := ""
+	hubbleAvailable := false
+	flowSource := ""
 
 	for i, ns := range namespaces {
 		fmt.Fprintf(progress, "\n── Namespace %d/%d: %s ──\n", i+1, len(namespaces), ns)
@@ -501,6 +514,21 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 		allWarnings = append(allWarnings, result.Warnings...)
 		totalPods += result.TotalPods
 		totalNetPol += result.NetworkPolicies
+
+		// Merge RBAC findings across namespaces
+		allRBACFindings = append(allRBACFindings, result.RBACFindings...)
+
+		// Merge runtime insights across namespaces
+		if result.RuntimeInsights != nil {
+			totalCVEs += result.RuntimeInsights.TotalCVEs
+			inUseCVEs += result.RuntimeInsights.InUseCVEs
+			allRuntimeProfiles = append(allRuntimeProfiles, result.RuntimeInsights.Profiles...)
+		}
+
+		if result.HubbleAvailable {
+			hubbleAvailable = true
+			flowSource = result.FlowSource
+		}
 
 		if len(allCompliance) == 0 {
 			allCompliance = result.Compliance
@@ -521,12 +549,52 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 		clusterScore = total / len(allScores)
 	}
 
-	// Re-compute compliance across all namespaces
-	allCompliance = compliance.MapAll(allScores, totalNetPol)
+	// Re-compute compliance across all namespaces with merged RBAC data
+	allCompliance = compliance.MapAll(allScores, totalNetPol, allRBACFindings)
 
 	// Re-run agent security analysis across ALL namespaces so cross-namespace
-	// dependencies are captured (e.g. agentmgr in cisco-ndfc → mcpserver in mcp)
-	crossNSAgentSummary := agentsec.Analyze(allScores)
+	// dependencies are captured (e.g. agentmgr in cisco-ndfc → mcpserver in mcp).
+	// Use AnalyzeWithRBAC when RBAC data is available for delegation chain analysis.
+	var crossNSAgentSummary *types.AgentSecuritySummary
+	if len(allRBACFindings) > 0 {
+		crossNSAgentSummary = agentsec.AnalyzeWithRBAC(allScores, allRBACFindings)
+	} else {
+		crossNSAgentSummary = agentsec.Analyze(allScores)
+	}
+
+	// Merge runtime insights
+	var mergedInsights *types.RuntimeInsights
+	if totalCVEs > 0 || len(allRuntimeProfiles) > 0 {
+		noiseReduction := 0.0
+		if totalCVEs > 0 {
+			noiseReduction = float64(totalCVEs-inUseCVEs) / float64(totalCVEs) * 100
+		}
+		podInUseMap := make(map[string]int)
+		for _, s := range allScores {
+			cves := s.Vulns.AllCVEs
+			if len(cves) == 0 {
+				cves = s.Vulns.TopCVEs
+			}
+			count := 0
+			for _, c := range cves {
+				if c.InUse {
+					count++
+				}
+			}
+			podInUseMap[s.PodName] = count
+		}
+		mergedInsights = &types.RuntimeInsights{
+			TotalCVEs:      totalCVEs,
+			InUseCVEs:      inUseCVEs,
+			NoiseReduction: noiseReduction,
+			Profiles:       allRuntimeProfiles,
+			PodInUseMap:    podInUseMap,
+		}
+	}
+
+	// Re-compute attack paths across all namespaces with merged RBAC
+	graph := attackpath.Build(allScores, allRBACFindings)
+	mergedAttackPaths := attackpath.Analyze(graph)
 
 	return &types.ScanResult{
 		ClusterName:     clusterName,
@@ -538,6 +606,11 @@ func RunMultiNamespaceScan(kubeconfig string, namespaces []string, progress io.W
 		NetworkPolicies: totalNetPol,
 		Warnings:        allWarnings,
 		Compliance:      allCompliance,
+		RBACFindings:    allRBACFindings,
+		HubbleAvailable: hubbleAvailable,
+		FlowSource:      flowSource,
+		RuntimeInsights: mergedInsights,
+		AttackPaths:     mergedAttackPaths,
 		AgentSecurity:   crossNSAgentSummary,
 	}, nil
 }
@@ -835,7 +908,12 @@ func RunScan(kubeconfig, namespace string, progress io.Writer) (*types.ScanResul
 	complianceResults := compliance.MapAll(scores, netPolCount, rbacFindings)
 
 	// Agent security analysis — identify MCP servers, agent pods, dependency chains
-	agentSummary := agentsec.Analyze(scores)
+	var agentSummary *types.AgentSecuritySummary
+	if len(rbacFindings) > 0 {
+		agentSummary = agentsec.AnalyzeWithRBAC(scores, rbacFindings)
+	} else {
+		agentSummary = agentsec.Analyze(scores)
+	}
 
 	// Attach runtime insights to the result
 	insightsMu.RLock()
