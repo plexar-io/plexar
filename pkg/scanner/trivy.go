@@ -531,6 +531,10 @@ func parseTrivyOutput(cmd *exec.Cmd, imageLabel string) ([]types.CVEInfo, error)
 				}
 			}
 
+			desc := v.Description
+			if desc == "" {
+				desc = v.Title
+			}
 			cves = append(cves, types.CVEInfo{
 				ID:               v.VulnerabilityID,
 				Severity:         strings.ToUpper(v.Severity),
@@ -539,7 +543,7 @@ func parseTrivyOutput(cmd *exec.Cmd, imageLabel string) ([]types.CVEInfo, error)
 				InstalledVersion: v.InstalledVersion,
 				FixedVersion:     v.FixedVersion,
 				PublishedDate:    v.PublishedDate,
-				Description:      v.Title,
+				Description:      desc,
 				References:       v.References,
 			})
 		}

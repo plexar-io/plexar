@@ -35,3 +35,4 @@ charts/*/*.tgz
 # Env
 .env
 .env.*
+plexar-docker

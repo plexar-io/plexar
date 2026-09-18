@@ -1034,6 +1034,28 @@ func runServe(cmd *cobra.Command, args []string) error {
 				if err := json.Unmarshal(data, &result); err != nil {
 					fmt.Fprintf(os.Stderr, "⚠  Failed to parse %s: %v\n", loadFile, err)
 				} else {
+					// Backfill empty descriptions in allCVEs from topCVEs (global lookup)
+					descMap := map[string]string{}
+					for si := range result.Scores {
+						for _, c := range result.Scores[si].Vulns.TopCVEs {
+							if c.Description != "" {
+								descMap[c.ID] = c.Description
+							}
+						}
+						for _, c := range result.Scores[si].Vulns.AllCVEs {
+							if c.Description != "" {
+								descMap[c.ID] = c.Description
+							}
+						}
+					}
+					for si := range result.Scores {
+						for ci := range result.Scores[si].Vulns.AllCVEs {
+							if result.Scores[si].Vulns.AllCVEs[ci].Description == "" {
+								result.Scores[si].Vulns.AllCVEs[ci].Description = descMap[result.Scores[si].Vulns.AllCVEs[ci].ID]
+							}
+						}
+					}
+
 					setCachedResult(&result)
 					setLastScanTime(result.ScanTime)
 					_ = store.Save(&result)

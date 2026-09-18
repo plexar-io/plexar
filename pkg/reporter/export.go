@@ -12,9 +12,9 @@ import (
 )
 
 // ExportJSON writes the scan result as pretty-printed JSON.
-// To keep the output compact (~1-2MB instead of ~100MB), allCVEs entries
-// are written without references and description — those fields average
-// 1.5KB per CVE and are duplicated across every pod sharing the same image.
+// To keep the output compact, allCVEs entries are written without
+// references — those URL lists average 1.5KB per CVE and are duplicated
+// across every pod sharing the same image (~62MB total).
 // The in-memory data retains the full fields for CVE Lookup.
 func ExportJSON(w io.Writer, result *types.ScanResult) error {
 	light := CompactResult(result)
@@ -24,7 +24,7 @@ func ExportJSON(w io.Writer, result *types.ScanResult) error {
 }
 
 // CompactResult returns a copy of the scan result with allCVEs trimmed
-// (no references/description). topCVEs are kept intact since they're small.
+// (no references). topCVEs are kept intact since they're small.
 func CompactResult(result *types.ScanResult) *types.ScanResult {
 	out := *result
 	out.Scores = make([]types.PlexarScore, len(result.Scores))
@@ -41,10 +41,11 @@ func CompactResult(result *types.ScanResult) *types.ScanResult {
 					InstalledVersion: c.InstalledVersion,
 					FixedVersion:     c.FixedVersion,
 					PublishedDate:    c.PublishedDate,
+					Description:      c.Description,
 					ExploitType:      c.ExploitType,
 					InUse:            c.InUse,
 					Confidence:       c.Confidence,
-					// references and description omitted — saves ~65MB
+					// references omitted — saves ~62MB
 				}
 			}
 			out.Scores[i].Vulns.AllCVEs = trimmed
