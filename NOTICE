@@ -1,0 +1,35 @@
+Plexar
+Copyright 2025 Plexar Security
+
+License Change Notice
+=====================
+
+Effective with this version, Plexar is licensed under the Business Source
+License 1.1 (BSL 1.1). This license permits non-commercial use including
+personal, academic, research, and internal development/testing use at no cost.
+Commercial use requires a separate license agreement.
+
+On September 20, 2030, the license for this version will automatically convert
+to the Apache License, Version 2.0, making it fully open source.
+
+Prior versions of Plexar (before this change) were released under the Apache
+License, Version 2.0 and remain available under those terms.
+
+For commercial licensing inquiries, contact: license@plexar.io
+
+What This Means For You
+=======================
+
+  You CAN:
+  - Use Plexar for personal projects, learning, and research
+  - Use Plexar for internal development, testing, and evaluation
+  - Modify the source code and contribute improvements back
+  - Use Plexar in academic papers and coursework
+  - Use Plexar at a non-profit for non-commercial activities
+
+  You CANNOT (without a commercial license):
+  - Embed Plexar in a commercial product or service
+  - Use Plexar in production at a for-profit company
+  - Offer Plexar as a managed/hosted service
+
+For details, see the LICENSE file.

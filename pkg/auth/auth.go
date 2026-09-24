@@ -38,6 +38,36 @@ func NoopMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
+// NewTokenMiddleware creates a static bearer token auth middleware.
+// When set, API requests must include "Authorization: Bearer <token>".
+// Health probes, metrics, and dashboard static assets are excluded.
+func NewTokenMiddleware(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if p == "/healthz" || p == "/readyz" || p == "/metrics" ||
+				p == "/" || p == "/index.html" ||
+				strings.HasPrefix(p, "/assets/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				http.Error(w, `{"error":"missing or invalid Authorization header"}`, http.StatusUnauthorized)
+				return
+			}
+
+			if strings.TrimPrefix(authHeader, "Bearer ") != token {
+				http.Error(w, `{"error":"invalid API token"}`, http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // jwksCache caches the JWKS keys from the issuer
 type jwksCache struct {
 	mu        sync.RWMutex

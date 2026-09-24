@@ -7,7 +7,7 @@
 The security, compliance, and runtime intelligence layer for Kubernetes workloads.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-BSL_1.1-blue?style=flat-square)](LICENSE)
 [![CI](https://github.com/plexar-io/plexar/actions/workflows/ci.yml/badge.svg)](https://github.com/plexar-io/plexar/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/plexar-io/plexar?style=flat-square&color=brightgreen)](https://github.com/plexar-io/plexar/releases)
 [![CNCF Landscape](https://img.shields.io/badge/CNCF-Landscape-326CE5?style=flat-square&logo=cncf)](https://landscape.cncf.io)
@@ -582,7 +582,7 @@ plexar/
 ├── Dockerfile
 ├── Makefile
 ├── go.mod
-└── LICENSE                       # Apache 2.0
+└── LICENSE                       # BSL 1.1 (converts to Apache 2.0 on Sep 2030)
 ```
 
 ---
@@ -858,7 +858,13 @@ go test ./...
 
 ## ◈ License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Business Source License 1.1 — see [LICENSE](LICENSE).
+
+**Free for:** personal, academic, research, internal development and testing, and non-profit use.
+**Commercial use:** requires a separate license. Contact license@plexar.io.
+**Converts to Apache 2.0** on September 20, 2030.
+
+> Versions prior to v0.9.0 were released under Apache 2.0 and remain under that license.
 
 ---
 

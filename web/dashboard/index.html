@@ -39,7 +39,7 @@
     --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
     --radius: 12px;
     --radius-sm: 8px;
-    --sidebar-w: 240px;
+    --sidebar-w: 220px;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -51,50 +51,59 @@
   }
   .mi { font-family: 'Material Icons Outlined'; font-size: 20px; vertical-align: middle; font-style: normal; }
 
-  /* ─── Sidebar ─── */
+  /* ─── Sidebar (floating) ─── */
   .sidebar {
-    width: var(--sidebar-w); min-height: 100vh;
+    width: calc(var(--sidebar-w) - 20px); min-height: calc(100vh - 20px);
     background: var(--bg-surface);
-    border-right: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 16px;
     display: flex; flex-direction: column;
-    position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+    position: fixed; left: 10px; top: 10px; bottom: 10px; z-index: 100;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    overflow: hidden;
   }
   .sidebar-brand {
-    padding: 20px 20px; display: flex; align-items: center; gap: 12px;
-    border-bottom: 1px solid var(--border);
+    padding: 20px 16px 16px; display: flex; align-items: center; gap: 10px;
   }
   .sidebar-brand .logo {
-    width: 36px; height: 36px; border-radius: 10px;
+    width: 34px; height: 34px; border-radius: 10px;
     background: linear-gradient(135deg, var(--primary), var(--primary-light));
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px; font-weight: 700; color: #fff;
+    font-size: 17px; font-weight: 700; color: #fff;
     box-shadow: 0 2px 8px rgba(25,118,210,0.3);
   }
-  .sidebar-brand .name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .sidebar-brand .name { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
   .sidebar-brand .edition { font-size: 10px; color: var(--text-disabled); display: block; text-transform: uppercase; letter-spacing: 1px; }
 
-  .sidebar-nav { padding: 8px 0; flex: 1; overflow-y: auto; }
+  .sidebar-nav { padding: 4px 0; flex: 1; overflow-y: auto; }
   .nav-section {
-    padding: 16px 20px 6px; font-size: 11px; font-weight: 500;
-    color: var(--text-disabled); text-transform: uppercase; letter-spacing: 1.2px;
+    padding: 14px 16px 6px; font-size: 10px; font-weight: 600;
+    color: var(--text-disabled); text-transform: uppercase; letter-spacing: 1.5px;
   }
+  .nav-section:first-child { padding-top: 2px; }
   .nav-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 20px; font-size: 14px; font-weight: 400; color: var(--text-secondary);
-    cursor: pointer; transition: all 0.2s; border-radius: 0;
-    margin: 1px 8px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; font-size: 13px; font-weight: 400; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+    margin: 2px 10px; border-radius: 8px;
   }
-  .nav-item:hover { background: var(--primary-bg); color: var(--text-primary); }
-  .nav-item.active { background: var(--primary-bg-hover); color: var(--primary-light); font-weight: 500; }
-  .nav-item .mi { font-size: 20px; width: 24px; text-align: center; }
+  .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+  .nav-item.active {
+    background: linear-gradient(135deg, rgba(25,118,210,0.2), rgba(66,165,245,0.12));
+    color: var(--primary-light); font-weight: 500;
+    box-shadow: 0 0 0 1px rgba(66,165,245,0.15);
+  }
+  .nav-item .mi { font-size: 19px; width: 22px; text-align: center; opacity: 0.8; }
+  .nav-item.active .mi { opacity: 1; }
   .nav-item .badge {
     margin-left: auto; background: var(--error-bg); color: var(--error-light);
-    padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+    padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600;
+    min-width: 22px; text-align: center;
   }
 
   .sidebar-footer {
-    padding: 16px 20px; border-top: 1px solid var(--border);
-    font-size: 12px; color: var(--text-disabled); line-height: 1.6;
+    padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px; color: var(--text-disabled); line-height: 1.5;
   }
   .sidebar-footer .cluster-name { color: var(--primary-light); font-weight: 500; }
 
@@ -150,61 +159,68 @@
   }
 
   /* ─── Grid Layouts ─── */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
-  /* ─── Stat Cards ─── */
+  /* ─── Dashboard Layout ─── */
+  .dash-row-charts { display: flex; gap: 16px; margin-bottom: 16px; align-items: stretch; }
+
+  /* ─── Stat Cards (VertexGuard-inspired) ─── */
   .stat-card {
     background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
-    position: relative; overflow: hidden;
+    border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+    position: relative;
+    display: flex; align-items: center; gap: 14px;
   }
-  .stat-card::before {
-    content: ''; position: absolute; top: 0; left: 0;
-    width: 4px; height: 100%; border-radius: 4px 0 0 4px;
-  }
-  .stat-card.accent-blue::before { background: var(--primary-light); }
-  .stat-card.accent-warning::before { background: var(--warning); }
-  .stat-card.accent-error::before { background: var(--error); }
-  .stat-card.accent-success::before { background: var(--success); }
   .stat-card .stat-icon {
-    width: 40px; height: 40px; border-radius: 10px;
+    width: 52px; height: 52px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 12px;
+    flex-shrink: 0;
   }
-  .stat-card .stat-icon.blue { background: var(--primary-bg); color: var(--primary-light); }
-  .stat-card .stat-icon.orange { background: var(--warning-bg); color: var(--warning); }
-  .stat-card .stat-icon.red { background: var(--error-bg); color: var(--error-light); }
-  .stat-card .stat-icon.green { background: var(--success-bg); color: var(--success); }
-  .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; letter-spacing: 0.3px; }
-  .stat-value { font-size: 36px; font-weight: 700; margin: 6px 0 4px; letter-spacing: -1px; }
-  .stat-sub { font-size: 18px; font-weight: 300; color: var(--text-secondary); }
-  .stat-change { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
-  .stat-change .mi { font-size: 16px; }
+  .stat-card .stat-icon .mi { font-size: 26px; }
+  .stat-card .stat-icon.blue { background: rgba(66,165,245,0.15); color: var(--primary-light); }
+  .stat-card .stat-icon.orange { background: rgba(255,167,38,0.15); color: var(--warning); }
+  .stat-card .stat-icon.red { background: rgba(239,83,80,0.15); color: var(--error-light); }
+  .stat-card .stat-icon.green { background: rgba(102,187,106,0.15); color: var(--success); }
+  .stat-card .stat-icon.purple { background: rgba(171,71,188,0.15); color: var(--purple); }
+  .stat-card .stat-info { flex: 1; min-width: 0; }
+  .stat-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .stat-value { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1; }
+  .stat-sub { font-size: 16px; font-weight: 300; color: var(--text-secondary); }
+  .stat-detail { font-size: 11px; color: var(--text-disabled); margin-top: 3px; }
+  .stat-clickable { cursor: pointer; transition: all 0.2s; }
+  .stat-clickable:hover { border-color: var(--primary); box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+  .stat-change { font-size: 11px; font-weight: 500; display: flex; align-items: center; gap: 3px; margin-top: 2px; }
+  .stat-change .mi { font-size: 14px; }
   .stat-change.up { color: var(--error-light); }
   .stat-change.down { color: var(--success); }
 
 
 
   /* ─── Network Graph (D3 Force) ─── */
-  .topo-pod-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 8px; padding: 12px 16px 16px;
+  .topo-graph-wrap { position: relative; height: 640px; background: #1a1e2e; overflow: hidden; border-radius: 12px; }
+  .topo-graph-toolbar { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; z-index: 5; pointer-events: none; }
+  .topo-graph-toolbar > * { pointer-events: auto; }
+  .topo-graph-btns { display: flex; gap: 4px; }
+  .topo-legend { display: flex; gap: 14px; font-size: 11px; color: #a0aec0; background: rgba(26,30,46,0.9); padding: 6px 14px; border-radius: 20px; backdrop-filter: blur(8px); }
+  .topo-legend span { display: flex; align-items: center; gap: 5px; }
+  .topo-leg-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .topo-leg-line { width: 18px; height: 2px; border-radius: 1px; display: inline-block; }
+  .topo-svg { width: 100%; height: 100%; cursor: grab; }
+  .topo-svg:active { cursor: grabbing; }
+  .topo-svg .link-line { fill: none; stroke-linecap: round; pointer-events: none; transition: stroke-opacity 0.25s; }
+  .topo-svg .pod-node { cursor: pointer; transition: opacity 0.2s; }
+  .topo-svg .pod-node:hover .node-ring { filter: brightness(1.3) drop-shadow(0 0 8px currentColor); }
+  .topo-svg .node-label { font-size: 11px; fill: #cbd5e0; text-anchor: middle; pointer-events: none; font-weight: 500; }
+  .topo-tooltip {
+    position: absolute; display: none; padding: 12px 16px; border-radius: 10px;
+    background: rgba(26,30,46,0.97); border: 1px solid rgba(255,255,255,0.1); color: #e2e8f0;
+    font-size: 12px; pointer-events: none; z-index: 10; white-space: nowrap; line-height: 1.7;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6); backdrop-filter: blur(12px); max-width: 280px;
   }
-  .topo-pod {
-    padding: 10px 12px; border-radius: 8px; cursor: pointer;
-    background: var(--bg-primary); border: 1px solid var(--border);
-    transition: all 0.15s; position: relative;
-  }
-  .topo-pod:hover { background: var(--card-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-  .topo-pod-selected { background: rgba(66,165,245,0.08) !important; border-color: var(--primary-light) !important; box-shadow: 0 0 0 1px var(--primary-light), 0 4px 16px rgba(66,165,245,0.15) !important; }
-  .topo-pod-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-  .topo-pod-meta { display: flex; gap: 6px; align-items: center; font-size: 11px; }
   .tag-ok { background: var(--success-bg); color: var(--success); }
   .tag-warning { background: var(--warning-bg); color: var(--warning); }
-  .graph-btn:hover { border-color: var(--primary-light); }
 
   /* ─── Tables ─── */
   .data-table { width: 100%; border-collapse: collapse; }
@@ -406,6 +422,9 @@
 </head>
 <body>
 
+<!-- Global tooltip -->
+<div id="stat-tooltip" style="display:none;position:fixed;z-index:9999;background:#1e3a5f;color:#e3e8ef;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5;max-width:240px;box-shadow:0 4px 16px rgba(0,0,0,0.5);border:1px solid #1e3a5f;pointer-events:none"></div>
+
 <!-- ═══ SIDEBAR ═══ -->
 <div class="sidebar">
   <div class="sidebar-brand">
@@ -506,6 +525,26 @@
       <span id="scan-banner-text">Scan in progress... Dashboard data will update automatically when complete.</span>
     </div>
     <div class="page-content">
+      <!-- Row 1: Stat cards (full width) -->
+      <div class="grid-4" style="margin-bottom:16px" id="dash-stats"></div>
+
+      <!-- Row 2: Trend chart + Risk gauge + Severity donut -->
+      <div class="dash-row-charts">
+        <div class="card" style="flex:3;min-width:0">
+          <div class="card-header"><h2>Vulnerability Trend</h2></div>
+          <div id="dash-trend-chart" style="height:200px"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:200px;text-align:center;padding:16px">
+          <div class="card-header" style="margin-bottom:0"><h2>Risk Score</h2></div>
+          <div id="dash-risk-gauge"></div>
+        </div>
+        <div class="card" style="flex:1.2;min-width:220px;text-align:center">
+          <div class="card-header"><h2>CVEs by Severity</h2></div>
+          <div id="dash-sev-donut"></div>
+        </div>
+      </div>
+
+      <!-- Noise reduction banner -->
       <div class="noise-banner" id="noise-banner">
         <div style="display:flex;align-items:center;gap:8px;min-width:130px">
           <span class="mi" style="font-size:20px;color:var(--success)">filter_alt</span>
@@ -538,7 +577,8 @@
           </div>
         </div>
       </div>
-      <div class="grid-4" style="margin-bottom:20px" id="dash-stats"></div>
+
+      <!-- Row 3: Top pods + Exploit chains -->
       <div class="grid-4" style="margin-bottom:20px" id="dash-chain-stats"></div>
       <div class="grid-2" style="margin-bottom:18px">
         <div class="card">
@@ -577,8 +617,29 @@
     <div class="page-content">
       <!-- Summary stats -->
       <div class="grid-4" style="margin-bottom:16px" id="topo-stats"></div>
-      <!-- Namespace grid -->
-      <div id="topo-grid"></div>
+      <!-- Interactive graph -->
+      <div class="card" style="margin-bottom:16px;padding:0;overflow:hidden">
+        <div class="topo-graph-wrap">
+          <div class="topo-graph-toolbar">
+            <div class="topo-legend">
+              <span><span class="topo-leg-dot" style="background:var(--error)"></span>Critical</span>
+              <span><span class="topo-leg-dot" style="background:var(--warning)"></span>High</span>
+              <span><span class="topo-leg-dot" style="background:var(--primary-light)"></span>Medium</span>
+              <span><span class="topo-leg-dot" style="background:var(--success)"></span>Low</span>
+              <span style="margin-left:12px"><span class="topo-leg-line" style="background:var(--primary-light)"></span>Configured</span>
+              <span><span class="topo-leg-line" style="background:var(--error);opacity:0.5"></span>Unrestricted</span>
+              <span><span class="topo-leg-line" style="background:var(--purple)"></span>Internet</span>
+            </div>
+            <div class="topo-graph-btns">
+              <button class="btn btn-sm" onclick="topoZoom(1.3)" title="Zoom in"><span class="mi" style="font-size:16px">add</span></button>
+              <button class="btn btn-sm" onclick="topoZoom(0.77)" title="Zoom out"><span class="mi" style="font-size:16px">remove</span></button>
+              <button class="btn btn-sm" onclick="topoFitAll()" title="Fit all"><span class="mi" style="font-size:16px">fit_screen</span></button>
+            </div>
+          </div>
+          <svg id="topo-svg" class="topo-svg"></svg>
+          <div class="topo-tooltip" id="topo-tooltip"></div>
+        </div>
+      </div>
       <!-- Pod detail panel -->
       <div class="card" id="topo-detail" style="display:none">
         <div class="card-header">
@@ -1170,14 +1231,250 @@ function renderSidebar() {
 // NAMESPACE DROPDOWNS
 // ═══════════════════════════════════════
 function renderNamespaceDropdowns() {
-  const ns = S.namespaces || [];
-  ['topo-ns-filter', 'pods-ns-filter'].forEach(id => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">All Namespaces</option>' +
+  // Collect namespaces from both API and scan data
+  const nsSet = new Set(S.namespaces || []);
+  if (S.scan && S.scan.scores) S.scan.scores.forEach(s => { if (s.namespace) nsSet.add(s.namespace); });
+  const ns = [...nsSet].sort();
+
+  // Pods page gets "All Namespaces" option
+  const podsSel = document.getElementById('pods-ns-filter');
+  if (podsSel) {
+    const cur = podsSel.value;
+    podsSel.innerHTML = '<option value="">All Namespaces</option>' +
       ns.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    if (cur) sel.value = cur;
+    if (cur) podsSel.value = cur;
+  }
+
+  // Topology gets namespace-only (no "All"), auto-select first
+  const topoSel = document.getElementById('topo-ns-filter');
+  if (topoSel) {
+    const cur = topoSel.value;
+    topoSel.innerHTML = ns.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if (cur && ns.includes(cur)) topoSel.value = cur;
+    else if (ns.length) topoSel.value = ns[0];
+  }
+}
+
+// ═══════════════════════════════════════
+// DASHBOARD CHARTS (SVG)
+// ═══════════════════════════════════════
+
+function renderRiskGauge(score) {
+  const el = document.getElementById('dash-risk-gauge');
+  if (!el) return;
+  const d = S.scan; if (!d) return;
+  const scores = d.scores || [];
+  const tiers = { critical: 0, high: 0, medium: 0, low: 0 };
+  scores.forEach(s => { tiers[s.tier] = (tiers[s.tier]||0) + 1; });
+  const inetCount = scores.filter(s => s.blast.internetAccess).length;
+  const noPolCount = scores.filter(s => !s.blast.hasNetworkPolicy).length;
+
+  const size = 240, cx = size/2, cy = size/2 + 10, r = 85;
+  const startAngle = Math.PI, endAngle = 0;
+  const scoreAngle = Math.PI - (score / 100) * Math.PI;
+  const bgArc = describeArc(cx, cy, r, startAngle, endAngle);
+  const valArc = describeArc(cx, cy, r, startAngle, scoreAngle);
+  const col = score >= 80 ? '#ef5350' : score >= 60 ? '#ffa726' : score >= 40 ? '#42a5f5' : '#66bb6a';
+  const tier = score >= 80 ? 'Critical' : score >= 60 ? 'High' : score >= 40 ? 'Medium' : 'Low';
+
+  let html = `<svg width="${size}" height="${size/2 + 50}" viewBox="0 0 ${size} ${size/2 + 50}" style="cursor:pointer" id="gauge-svg">
+    <defs>
+      <linearGradient id="gauge-grad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#66bb6a"/><stop offset="40%" stop-color="#42a5f5"/>
+        <stop offset="70%" stop-color="#ffa726"/><stop offset="100%" stop-color="#ef5350"/>
+      </linearGradient>
+    </defs>
+    <path d="${bgArc}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16" stroke-linecap="round"/>
+    <path d="${valArc}" fill="none" stroke="url(#gauge-grad)" stroke-width="16" stroke-linecap="round"/>
+    <text id="gauge-score" x="${cx}" y="${cy - 10}" text-anchor="middle" fill="${col}" font-size="44" font-weight="700" font-family="Roboto,sans-serif">${score}</text>
+    <text id="gauge-sub" x="${cx}" y="${cy + 14}" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="14" font-family="Roboto,sans-serif">/ 100</text>
+    <text id="gauge-tier" x="${cx}" y="${cy + 38}" text-anchor="middle" fill="${col}" font-size="16" font-weight="500" font-family="Roboto,sans-serif">${tier}</text>
+  </svg>`;
+  el.innerHTML = html;
+
+  // Hover: show breakdown
+  const svg = document.getElementById('gauge-svg');
+  const gScore = document.getElementById('gauge-score');
+  const gSub = document.getElementById('gauge-sub');
+  const gTier = document.getElementById('gauge-tier');
+  svg.addEventListener('mouseenter', () => {
+    gScore.textContent = d.totalPods;
+    gSub.textContent = 'pods scanned';
+    gTier.textContent = '';
+    // Show breakdown below gauge
+    let info = '<div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:11px;margin-top:4px;text-align:left;padding:0 10px">';
+    info += `<span style="color:#ef5350">\u25CF Critical pods</span><span style="font-weight:600">${tiers.critical}</span>`;
+    info += `<span style="color:#ffa726">\u25CF High pods</span><span style="font-weight:600">${tiers.high}</span>`;
+    info += `<span style="color:#42a5f5">\u25CF Medium pods</span><span style="font-weight:600">${tiers.medium}</span>`;
+    info += `<span style="color:var(--text-disabled)">\u25CF Internet exposed</span><span style="font-weight:600">${inetCount}</span>`;
+    info += `<span style="color:var(--text-disabled)">\u25CF No NetworkPolicy</span><span style="font-weight:600">${noPolCount}</span>`;
+    info += '</div>';
+    let infoEl = el.querySelector('.gauge-hover-info');
+    if (!infoEl) { infoEl = document.createElement('div'); infoEl.className = 'gauge-hover-info'; el.appendChild(infoEl); }
+    infoEl.innerHTML = info;
+  });
+  svg.addEventListener('mouseleave', () => {
+    gScore.textContent = score;
+    gSub.textContent = '/ 100';
+    gTier.textContent = tier;
+    const infoEl = el.querySelector('.gauge-hover-info');
+    if (infoEl) infoEl.remove();
+  });
+}
+
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const sx = cx + r * Math.cos(startAngle), sy = cy - r * Math.sin(startAngle);
+  const ex = cx + r * Math.cos(endAngle), ey = cy - r * Math.sin(endAngle);
+  const largeArc = Math.abs(startAngle - endAngle) > Math.PI ? 1 : 0;
+  return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
+}
+
+function renderSevDonut(crit, high, med) {
+  const el = document.getElementById('dash-sev-donut');
+  if (!el) return;
+  const total = crit + high + med;
+  if (total === 0) { el.innerHTML = '<div style="color:var(--text-secondary);padding:20px">No CVE data</div>'; return; }
+  const size = 180, cx = size/2, cy = size/2, r = 65, w = 18;
+  const slices = [
+    { val: crit, color: '#ef5350', label: 'Critical' },
+    { val: high, color: '#ffa726', label: 'High' },
+    { val: med, color: '#42a5f5', label: 'Medium' },
+  ].filter(s => s.val > 0);
+
+  let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" id="sev-donut-svg">`;
+  let angle = -Math.PI / 2;
+  slices.forEach((s, idx) => {
+    const pct = s.val / total;
+    const sweep = pct * 2 * Math.PI;
+    const gap = 0.03;
+    const a1 = angle + gap/2, a2 = angle + sweep - gap/2;
+    if (a2 <= a1) { angle += sweep; return; }
+    const sx = cx + r * Math.cos(a1), sy = cy + r * Math.sin(a1);
+    const ex = cx + r * Math.cos(a2), ey = cy + r * Math.sin(a2);
+    const large = sweep > Math.PI ? 1 : 0;
+    svg += `<path class="donut-arc" data-idx="${idx}" d="M ${sx} ${sy} A ${r} ${r} 0 ${large} 1 ${ex} ${ey}" fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linecap="round" style="cursor:pointer;transition:stroke-width 0.15s,opacity 0.15s"/>`;
+    angle += sweep;
+  });
+  svg += `<text id="donut-val" x="${cx}" y="${cy - 4}" text-anchor="middle" fill="var(--text-primary)" font-size="22" font-weight="700" font-family="Roboto,sans-serif">${total.toLocaleString()}</text>`;
+  svg += `<text id="donut-lbl" x="${cx}" y="${cy + 14}" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Roboto,sans-serif">Total CVEs</text>`;
+  svg += '</svg>';
+
+  // Legend below donut
+  svg += '<div style="display:flex;justify-content:center;gap:16px;margin-top:8px;font-size:11px">';
+  slices.forEach(s => {
+    svg += `<div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span><span style="color:var(--text-secondary)">${s.label}</span><span style="color:var(--text-primary);font-weight:600">${s.val.toLocaleString()}</span></div>`;
+  });
+  svg += '</div>';
+  el.innerHTML = svg;
+
+  // Hover interaction on arcs
+  const donutVal = document.getElementById('donut-val');
+  const donutLbl = document.getElementById('donut-lbl');
+  const arcs = document.querySelectorAll('.donut-arc');
+  arcs.forEach(arc => {
+    arc.addEventListener('mouseenter', () => {
+      const idx = parseInt(arc.dataset.idx);
+      const s = slices[idx];
+      const pct = ((s.val / total) * 100).toFixed(1);
+      donutVal.textContent = s.val.toLocaleString();
+      donutVal.setAttribute('fill', s.color);
+      donutLbl.textContent = s.label + ' (' + pct + '%)';
+      // Highlight this arc, dim others
+      arcs.forEach(a => {
+        if (a === arc) { a.setAttribute('stroke-width', '22'); a.style.opacity = '1'; }
+        else { a.style.opacity = '0.3'; }
+      });
+    });
+    arc.addEventListener('mouseleave', () => {
+      donutVal.textContent = total.toLocaleString();
+      donutVal.setAttribute('fill', 'var(--text-primary)');
+      donutLbl.textContent = 'Total CVEs';
+      arcs.forEach(a => { a.setAttribute('stroke-width', String(w)); a.style.opacity = '1'; });
+    });
+  });
+}
+
+function renderTrendChart() {
+  const el = document.getElementById('dash-trend-chart');
+  if (!el) return;
+  // Fetch history data
+  fetch('/api/history').then(r => r.json()).then(history => {
+    if (!history || !history.length) {
+      el.innerHTML = '<div style="color:var(--text-secondary);padding:40px 20px;text-align:center"><span class="mi" style="font-size:32px;display:block;margin-bottom:8px;opacity:0.3">timeline</span>Trend data will appear after multiple scans</div>';
+      return;
+    }
+    // Deduplicate by day, take last entry per day
+    const byDay = {};
+    history.forEach(h => {
+      const day = h.timestamp.slice(0, 10);
+      byDay[day] = h;
+    });
+    const points = Object.values(byDay).slice(-14); // last 14 days
+    if (points.length < 2) {
+      el.innerHTML = '<div style="color:var(--text-secondary);padding:40px 20px;text-align:center"><span class="mi" style="font-size:32px;display:block;margin-bottom:8px;opacity:0.3">timeline</span>Need at least 2 scan days for trend</div>';
+      return;
+    }
+
+    const W = el.clientWidth || 500, H = 180;
+    const pad = { top: 20, right: 20, bottom: 30, left: 45 };
+    const cw = W - pad.left - pad.right, ch = H - pad.top - pad.bottom;
+
+    // Use clusterScore as the metric
+    const vals = points.map(p => p.clusterScore);
+    const maxV = Math.max(...vals, 100);
+    const minV = Math.min(...vals, 0);
+    const range = maxV - minV || 1;
+
+    const xScale = (i) => pad.left + (i / (points.length - 1)) * cw;
+    const yScale = (v) => pad.top + ch - ((v - minV) / range) * ch;
+
+    // Build area + line path
+    let linePath = '', areaPath = '';
+    points.forEach((p, i) => {
+      const x = xScale(i), y = yScale(p.clusterScore);
+      if (i === 0) { linePath += `M ${x} ${y}`; areaPath += `M ${x} ${pad.top + ch}`; }
+      else { linePath += ` L ${x} ${y}`; }
+      areaPath += ` L ${x} ${y}`;
+    });
+    areaPath += ` L ${xScale(points.length - 1)} ${pad.top + ch} Z`;
+
+    let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+    svg += `<defs><linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(66,165,245,0.3)"/><stop offset="100%" stop-color="rgba(66,165,245,0)"/></linearGradient></defs>`;
+
+    // Y-axis gridlines
+    const yTicks = 5;
+    for (let i = 0; i <= yTicks; i++) {
+      const v = minV + (range * i / yTicks);
+      const y = yScale(v);
+      svg += `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+      svg += `<text x="${pad.left - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-disabled)" font-size="10" font-family="Roboto,sans-serif">${Math.round(v)}</text>`;
+    }
+
+    // X-axis labels
+    const step = Math.max(1, Math.floor(points.length / 6));
+    points.forEach((p, i) => {
+      if (i % step !== 0 && i !== points.length - 1) return;
+      const x = xScale(i);
+      const label = p.timestamp.slice(5, 10); // MM-DD
+      svg += `<text x="${x}" y="${H - 6}" text-anchor="middle" fill="var(--text-disabled)" font-size="10" font-family="Roboto,sans-serif">${label}</text>`;
+    });
+
+    // Area fill + line
+    svg += `<path d="${areaPath}" fill="url(#trend-fill)"/>`;
+    svg += `<path d="${linePath}" fill="none" stroke="#42a5f5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+    // Dots
+    points.forEach((p, i) => {
+      const x = xScale(i), y = yScale(p.clusterScore);
+      svg += `<circle cx="${x}" cy="${y}" r="3.5" fill="#42a5f5" stroke="var(--bg-card)" stroke-width="2"/>`;
+    });
+
+    svg += '</svg>';
+    // Add subtitle
+    svg += `<div style="display:flex;justify-content:space-between;padding:4px 8px 0;font-size:10px;color:var(--text-disabled)"><span>Cluster Risk Score over time</span><span>${points.length} data points</span></div>`;
+    el.innerHTML = svg;
+  }).catch(() => {
+    el.innerHTML = '<div style="color:var(--text-secondary);padding:40px 20px;text-align:center">Could not load trend data</div>';
   });
 }
 
@@ -1217,27 +1514,64 @@ function renderDashboard() {
   const filterLabel = S.inUseOnly ? 'Showing In Use Only' : 'In Use Only';
   document.getElementById('inuse-toggle-label').textContent = filterLabel;
 
+  const medCVEs = scores.reduce((sum, s) => sum + (countCVEs(s.vulns).medium || 0), 0);
+  const totalCVEs = critCVEs + highCVEsAll + medCVEs;
+
   document.getElementById('dash-stats').innerHTML = `
-    <div class="stat-card accent-blue">
-      <div class="stat-icon blue"><span class="mi">speed</span></div>
-      <div class="stat-label">Cluster Risk Score</div>
-      <div class="stat-value" style="color:${scoreColor(d.clusterScore)}">${d.clusterScore}<span class="stat-sub">/100</span></div>
-    </div>
-    <div class="stat-card accent-warning">
-      <div class="stat-icon orange"><span class="mi">shield</span></div>
-      <div class="stat-label">Pods Without NetworkPolicy</div>
-      <div class="stat-value" style="color:var(--warning)">${unprotected}<span class="stat-sub">/${d.totalPods}</span></div>
-    </div>
-    <div class="stat-card accent-error">
+    <div class="stat-card stat-clickable" onclick="showPage('cves')">
       <div class="stat-icon red"><span class="mi">bug_report</span></div>
-      <div class="stat-label">Critical CVEs${S.inUseOnly ? ' (In Use)' : ''}</div>
-      <div class="stat-value" style="color:var(--error-light)">${critCVEs}</div>
+      <div class="stat-info">
+        <div class="stat-label">Critical CVEs${S.inUseOnly ? ' (In Use)' : ''} <span class="mi stat-tip" data-tip="CVSS 9.0+ vulnerabilities found in container images. Click to explore all CVEs." style="font-size:14px;color:var(--text-disabled);cursor:help;opacity:0.5">info_outline</span></div>
+        <div class="stat-value" style="color:var(--error-light)">${critCVEs.toLocaleString()}</div>
+        <div class="stat-detail">${highCVEsAll.toLocaleString()} high severity</div>
+      </div>
     </div>
-    <div class="stat-card accent-success">
-      <div class="stat-icon green"><span class="mi">policy</span></div>
-      <div class="stat-label">Compliance Score</div>
-      <div class="stat-value" style="color:var(--success)">${avgCompliance}<span class="stat-sub">%</span></div>
+    <div class="stat-card stat-clickable" onclick="showPage('topology')">
+      <div class="stat-icon orange"><span class="mi">shield</span></div>
+      <div class="stat-info">
+        <div class="stat-label">No NetworkPolicy <span class="mi stat-tip" data-tip="Pods without a Kubernetes NetworkPolicy. These can communicate with any pod in the namespace unrestricted." style="font-size:14px;color:var(--text-disabled);cursor:help;opacity:0.5">info_outline</span></div>
+        <div class="stat-value" style="color:var(--warning)">${unprotected}<span class="stat-sub"> / ${d.totalPods}</span></div>
+        <div class="stat-detail">${Math.round(unprotected/d.totalPods*100)}% unprotected</div>
+      </div>
+    </div>
+    <div class="stat-card stat-clickable" onclick="showPage('cves')">
+      <div class="stat-icon purple"><span class="mi">security</span></div>
+      <div class="stat-info">
+        <div class="stat-label">Total Vulnerabilities <span class="mi stat-tip" data-tip="All CVEs (Critical + High + Medium) detected across all container images in the cluster." style="font-size:14px;color:var(--text-disabled);cursor:help;opacity:0.5">info_outline</span></div>
+        <div class="stat-value" style="color:var(--purple)">${totalCVEs.toLocaleString()}</div>
+        <div class="stat-detail">across ${scores.length} pods</div>
+      </div>
+    </div>
+    <div class="stat-card stat-clickable" onclick="showPage('compliance')">
+      <div class="stat-icon green"><span class="mi">verified_user</span></div>
+      <div class="stat-info">
+        <div class="stat-label">Compliance Score <span class="mi stat-tip" data-tip="Average compliance score across CIS, NSA, and MITRE benchmarks. Higher is better." style="font-size:14px;color:var(--text-disabled);cursor:help;opacity:0.5">info_outline</span></div>
+        <div class="stat-value" style="color:var(--success)">${avgCompliance}<span class="stat-sub">%</span></div>
+        <div class="stat-detail">${S.compliance.length} frameworks checked</div>
+      </div>
     </div>`;
+
+  // ── Risk Score Donut Gauge ──
+  renderRiskGauge(d.clusterScore);
+
+  // ── CVEs by Severity Donut ──
+  renderSevDonut(critCVEs, highCVEsAll, medCVEs);
+
+  // ── Trend Chart ──
+  renderTrendChart();
+
+  // Bind info tooltips
+  const tipEl = document.getElementById('stat-tooltip');
+  document.querySelectorAll('.stat-tip').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      tipEl.textContent = el.dataset.tip;
+      tipEl.style.display = 'block';
+      const r = el.getBoundingClientRect();
+      tipEl.style.left = Math.min(r.left, window.innerWidth - 260) + 'px';
+      tipEl.style.top = (r.top - tipEl.offsetHeight - 8) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tipEl.style.display = 'none'; });
+  });
 
   // Top-risk table
   const top5 = scores.slice(0, 5);
@@ -1362,12 +1696,71 @@ function renderDashboard() {
 // TOPOLOGY — D3 Force-Directed Graph
 // ═══════════════════════════════════════
 let topoScores = [];
+let topoTransform = { x: 0, y: 0, k: 1 };
+let topoNodeMap = {};
+const NODE_R = 24;
+
+// Pick a Material Icon based on pod name patterns
+// All icons verified against Material Icons Outlined font
+function podIcon(name) {
+  const n = name.toLowerCase();
+  if (n.includes('db') || n.includes('postgres') || n.includes('mysql') || n.includes('maria') || n.includes('mongo') || n.includes('redis')) return 'storage';
+  if (n.includes('web') || n.includes('nginx') || n.includes('apache') || n.includes('frontend') || n.includes('ui')) return 'language';
+  if (n.includes('api') || n.includes('gateway') || n.includes('proxy') || n.includes('ingress')) return 'api';
+  if (n.includes('log') || n.includes('monitor') || n.includes('metric') || n.includes('grafana') || n.includes('prom')) return 'insert_chart';
+  if (n.includes('queue') || n.includes('kafka') || n.includes('rabbit') || n.includes('nats')) return 'swap_horiz';
+  if (n.includes('auth') || n.includes('ldap') || n.includes('sso') || n.includes('keycloak')) return 'lock';
+  if (n.includes('config') || n.includes('etcd') || n.includes('consul') || n.includes('vault')) return 'settings';
+  if (n.includes('worker') || n.includes('job') || n.includes('cron') || n.includes('batch')) return 'work';
+  if (n.includes('net') || n.includes('dns') || n.includes('service') || n.includes('discovery')) return 'hub';
+  if (n.includes('backup') || n.includes('restore')) return 'backup';
+  if (n.includes('agent') || n.includes('daemon') || n.includes('controller')) return 'smart_toy';
+  if (n.includes('image') || n.includes('registry')) return 'inventory_2';
+  if (n.includes('sim') || n.includes('test') || n.includes('bench')) return 'science';
+  if (n.includes('alarm') || n.includes('alert') || n.includes('notify')) return 'notifications';
+  if (n.includes('fabric') || n.includes('switch') || n.includes('router')) return 'device_hub';
+  if (n.includes('report') || n.includes('export') || n.includes('analytics')) return 'assessment';
+  if (n.includes('infra') || n.includes('platform') || n.includes('system')) return 'memory';
+  if (n.includes('firmware') || n.includes('update') || n.includes('patch')) return 'system_update';
+  if (n.includes('chariot') || n.includes('helm') || n.includes('deploy')) return 'rocket_launch';
+  if (n.includes('admin') || n.includes('manage')) return 'admin_panel_settings';
+  if (n.includes('visuali') || n.includes('view') || n.includes('dash')) return 'visibility';
+  if (n.includes('ptp') || n.includes('ntp') || n.includes('time') || n.includes('clock')) return 'schedule';
+  if (n.includes('plugin') || n.includes('eplus') || n.includes('extension')) return 'extension';
+  if (n.includes('syslog') || n.includes('trap') || n.includes('snmp')) return 'description';
+  return 'widgets';
+}
+
+// Ring colors: distinct per tier
+const RING_COLORS = { critical: '#ef5350', high: '#ffa726', medium: '#42a5f5', low: '#66bb6a' };
+const FILL_COLORS = { critical: '#2d1418', high: '#2d2014', medium: '#14202d', low: '#142d1a' };
+// Secondary ring colors for visual variety within same tier (based on pod function)
+const ICON_RING_PALETTE = [
+  { ring: '#e57373', fill: '#2d1a1a' },  // red
+  { ring: '#f06292', fill: '#2d1a24' },  // pink
+  { ring: '#ba68c8', fill: '#241a2d' },  // purple
+  { ring: '#7986cb', fill: '#1a1e2d' },  // indigo
+  { ring: '#64b5f6', fill: '#1a222d' },  // blue
+  { ring: '#4dd0e1', fill: '#1a2a2d' },  // cyan
+  { ring: '#4db6ac', fill: '#1a2d28' },  // teal
+  { ring: '#81c784', fill: '#1a2d1c' },  // green
+  { ring: '#aed581', fill: '#222d1a' },  // lime
+  { ring: '#ffb74d', fill: '#2d241a' },  // orange
+  { ring: '#ff8a65', fill: '#2d1e1a' },  // deep orange
+  { ring: '#a1887f', fill: '#2d2420' },  // brown
+];
+function podColorIdx(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return Math.abs(h) % ICON_RING_PALETTE.length;
+}
 
 function renderTopology() {
   if (!S.scan || !S.scan.scores) return;
 
   const nsFilter = document.getElementById('topo-ns-filter')?.value || '';
   topoScores = nsFilter ? S.scan.scores.filter(s => s.namespace === nsFilter) : S.scan.scores;
+  if (!topoScores.length) return;
 
   // ── Summary stats ──
   const totalPods = topoScores.length;
@@ -1375,84 +1768,281 @@ function renderTopology() {
   const noNetPol = topoScores.filter(s => !s.blast.hasNetworkPolicy).length;
   const inetPods = topoScores.filter(s => s.blast.internetAccess).length;
   document.getElementById('topo-stats').innerHTML = `
-    <div class="stat-card accent-error">
-      <div class="stat-icon red"><span class="mi">dns</span></div>
-      <div class="stat-label">Total Pods</div>
-      <div class="stat-value">${totalPods}</div>
-    </div>
-    <div class="stat-card ${critPods ? 'accent-error' : 'accent-success'}">
-      <div class="stat-icon ${critPods ? 'red' : 'green'}"><span class="mi">warning</span></div>
-      <div class="stat-label">Critical Risk</div>
-      <div class="stat-value">${critPods}</div>
-    </div>
-    <div class="stat-card ${noNetPol ? 'accent-warning' : 'accent-success'}">
-      <div class="stat-icon ${noNetPol ? 'orange' : 'green'}"><span class="mi">shield</span></div>
-      <div class="stat-label">No Network Policy</div>
-      <div class="stat-value">${noNetPol}</div>
-    </div>
-    <div class="stat-card ${inetPods ? 'accent-error' : 'accent-success'}">
-      <div class="stat-icon ${inetPods ? 'red' : 'green'}"><span class="mi">public</span></div>
-      <div class="stat-label">Internet Exposed</div>
-      <div class="stat-value">${inetPods}</div>
-    </div>`;
+    <div class="stat-card accent-error"><div class="stat-icon red"><span class="mi">dns</span></div><div class="stat-label">Total Pods</div><div class="stat-value">${totalPods}</div></div>
+    <div class="stat-card ${critPods?'accent-error':'accent-success'}"><div class="stat-icon ${critPods?'red':'green'}"><span class="mi">warning</span></div><div class="stat-label">Critical Risk</div><div class="stat-value">${critPods}</div></div>
+    <div class="stat-card ${noNetPol?'accent-warning':'accent-success'}"><div class="stat-icon ${noNetPol?'orange':'green'}"><span class="mi">shield</span></div><div class="stat-label">No Network Policy</div><div class="stat-value">${noNetPol}</div></div>
+    <div class="stat-card ${inetPods?'accent-error':'accent-success'}"><div class="stat-icon ${inetPods?'red':'green'}"><span class="mi">public</span></div><div class="stat-label">Internet Exposed</div><div class="stat-value">${inetPods}</div></div>`;
 
-  // ── Group pods by namespace ──
-  const nsPods = {};
+  // ── Build nodes ──
+  topoNodeMap = {};
+  const nodes = [];
   topoScores.forEach(s => {
-    if (!nsPods[s.namespace]) nsPods[s.namespace] = [];
-    nsPods[s.namespace].push(s);
+    const palette = ICON_RING_PALETTE[podColorIdx(s.podName)];
+    const n = { id: s.podName, label: shortPod(s.podName), tier: s.tier, score: s.total,
+      ringColor: palette.ring, fillColor: palette.fill, tierColor: RING_COLORS[s.tier],
+      icon: podIcon(s.podName), x: 0, y: 0, vx: 0, vy: 0,
+      inet: s.blast.internetAccess, noNetPol: !s.blast.hasNetworkPolicy };
+    nodes.push(n);
+    topoNodeMap[s.podName] = n;
   });
-  // Sort namespaces by pod count desc, pods within by score desc
-  const nsNames = Object.keys(nsPods).sort((a, b) => nsPods[b].length - nsPods[a].length);
-  nsNames.forEach(ns => nsPods[ns].sort((a, b) => b.total - a.total));
 
-  // ── Render namespace cards with pod grid ──
-  const grid = document.getElementById('topo-grid');
-  grid.innerHTML = nsNames.map(ns => {
-    const pods = nsPods[ns];
-    const nsCrit = pods.filter(p => p.tier === 'critical').length;
-    const nsNoNetPol = pods.filter(p => !p.blast.hasNetworkPolicy).length;
-    const nsInet = pods.filter(p => p.blast.internetAccess).length;
+  // ── Build links ──
+  const links = [];
+  const added = new Set();
+  topoScores.forEach(s => {
+    (s.blast.configuredTargets || []).forEach(t => {
+      let tgt = topoNodeMap[t] ? t : Object.keys(topoNodeMap).find(k => k.startsWith(t + '-'));
+      if (!tgt || !topoNodeMap[tgt]) return;
+      const key = s.podName < tgt ? s.podName+'|'+tgt : tgt+'|'+s.podName;
+      if (added.has(key)) return;
+      added.add(key);
+      links.push({ src: s.podName, tgt });
+    });
+  });
 
-    const badges = [
-      `<span style="color:var(--text-secondary);font-size:12px">${pods.length} pods</span>`,
-      nsCrit ? `<span style="background:var(--error-bg);color:var(--error-light);padding:2px 8px;border-radius:10px;font-size:11px">${nsCrit} critical</span>` : '',
-      nsNoNetPol ? `<span style="background:var(--warning-bg);color:var(--warning);padding:2px 8px;border-radius:10px;font-size:11px">${nsNoNetPol} no netpol</span>` : '',
-      nsInet ? `<span style="background:rgba(171,71,188,0.15);color:#ce93d8;padding:2px 8px;border-radius:10px;font-size:11px">${nsInet} internet</span>` : '',
-    ].filter(Boolean).join(' ');
+  // ── Force-directed layout ──
+  const svg = document.getElementById('topo-svg');
+  const wrap = svg.parentElement;
+  const W = wrap.clientWidth || 960;
+  const H = wrap.clientHeight || 640;
+  const cx = W / 2, cy = H / 2;
 
-    const podCells = pods.map(p => {
-      const color = TIER_COLORS[p.tier] || '#8796a5';
-      const reach = blastCount(p.blast);
-      const icons = [
-        !p.blast.hasNetworkPolicy ? '<span title="No NetworkPolicy" style="color:var(--warning);font-size:11px">&#9888;</span>' : '',
-        p.blast.internetAccess ? '<span title="Internet exposed" style="color:#ce93d8;font-size:11px">&#9679;</span>' : '',
-      ].filter(Boolean).join('');
+  // Initial spread in a big circle
+  const spread = Math.min(W, H) * 0.35;
+  nodes.forEach((n, i) => {
+    const a = (2 * Math.PI * i) / nodes.length + Math.random() * 0.3;
+    n.x = cx + spread * Math.cos(a) * (0.6 + Math.random() * 0.4);
+    n.y = cy + spread * Math.sin(a) * (0.6 + Math.random() * 0.4);
+  });
 
-      return `<div class="topo-pod" data-pod="${esc(p.podName)}" onclick="selectTopoPod('${esc(p.podName)}')"
-        style="border-color:${color};${p.tier==='critical'?'box-shadow:0 0 8px '+color+'33;':''}"
-        title="${esc(p.podName)}&#10;Score: ${p.total} (${p.tier})&#10;CVEs: ${p.vulns.critical}C/${p.vulns.high}H&#10;Blast: ${reach} services${p.blast.internetAccess ? ' + internet' : ''}&#10;NetPol: ${p.blast.hasNetworkPolicy ? 'yes' : 'NONE'}">
-        <div class="topo-pod-name" style="color:${color}">${esc(shortPod(p.podName))}</div>
-        <div class="topo-pod-meta">
-          <span style="font-weight:600;color:${color}">${p.total}</span>
-          <span style="color:var(--text-disabled)">${p.vulns.critical}C/${p.vulns.high}H</span>
-          <span style="color:var(--text-disabled)">${reach}svc</span>
-          ${icons}
-        </div>
-      </div>`;
-    }).join('');
+  // Simulation parameters tuned for ~40 nodes with generous spacing
+  const MIN_DIST = NODE_R * 2 + 80;  // nodes must be this far apart
+  const REPULSION = 120000;
+  const SPRING_K = 0.002;
+  const SPRING_LEN = 180;
+  const GRAVITY = 0.002;
+  const DAMP = 0.82;
 
-    return `<div class="card" style="margin-bottom:16px">
-      <div class="card-header">
-        <h2 style="display:flex;align-items:center;gap:8px">
-          <span class="mi" style="font-size:18px;color:var(--primary-light)">folder</span>
-          ${esc(ns)}
-        </h2>
-        <div style="display:flex;gap:8px;align-items:center">${badges}</div>
-      </div>
-      <div class="topo-pod-grid">${podCells}</div>
-    </div>`;
-  }).join('');
+  for (let iter = 0; iter < 400; iter++) {
+    const alpha = Math.max(0.01, 1 - iter / 400);
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 1) { dx = (Math.random() - 0.5) * 2; dy = (Math.random() - 0.5) * 2; d = 2; }
+        const f = alpha * REPULSION / (d * d);
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+    }
+    // Spring attraction for linked nodes
+    links.forEach(l => {
+      const a = topoNodeMap[l.src], b = topoNodeMap[l.tgt];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const f = alpha * SPRING_K * (d - SPRING_LEN);
+      a.vx += (dx / d) * f; a.vy += (dy / d) * f;
+      b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
+    });
+    // Center gravity
+    nodes.forEach(n => {
+      n.vx += (cx - n.x) * GRAVITY * alpha;
+      n.vy += (cy - n.y) * GRAVITY * alpha;
+    });
+    // Integrate + damp
+    nodes.forEach(n => {
+      n.vx *= DAMP; n.vy *= DAMP;
+      n.x += n.vx; n.y += n.vy;
+    });
+    // Collision: push apart if too close
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        if (d < MIN_DIST) {
+          const push = (MIN_DIST - d) / 2 + 2;
+          const ux = dx / d, uy = dy / d;
+          a.x -= ux * push; a.y -= uy * push;
+          b.x += ux * push; b.y += uy * push;
+        }
+      }
+    }
+  }
+
+  // ── Fit to viewport ──
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    minX = Math.min(minX, n.x - 60); maxX = Math.max(maxX, n.x + 60);
+    minY = Math.min(minY, n.y - 60); maxY = Math.max(maxY, n.y + 60);
+  });
+  const cw = maxX - minX, ch = maxY - minY;
+  const fitK = Math.min(W / cw, H / ch, 1.2) * 0.88;
+  topoTransform = { x: W / 2 - ((minX + maxX) / 2) * fitK, y: H / 2 - ((minY + maxY) / 2) * fitK, k: fitK };
+
+  // ── Render SVG ──
+  // Build reachability links (blast radius — all pods this pod can reach, not just configured)
+  const reachLinks = [];
+  topoScores.forEach(s => {
+    // unrestricted targets = all pods in namespace minus itself when no netpol
+    const allTargets = new Set([...(s.blast.configuredTargets||[]), ...(s.blast.unrestrictedTargets||[])]);
+    allTargets.forEach(t => {
+      let tgt = topoNodeMap[t] ? t : Object.keys(topoNodeMap).find(k => k.startsWith(t + '-'));
+      if (!tgt || !topoNodeMap[tgt] || tgt === s.podName) return;
+      reachLinks.push({ src: s.podName, tgt });
+    });
+  });
+
+  let svgHTML = `<defs>
+    <clipPath id="node-clip"><circle r="${NODE_R - 3}"/></clipPath>
+    <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+  svgHTML += `<g id="topo-root" transform="translate(${topoTransform.x},${topoTransform.y}) scale(${topoTransform.k})">`;
+
+  // Connection lines (rendered first so they're behind nodes)
+  links.forEach(l => {
+    const s = topoNodeMap[l.src], t = topoNodeMap[l.tgt];
+    if (!s || !t) return;
+    const dx = t.x - s.x, dy = t.y - s.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Shorten to stop at circle edges
+    const sx = s.x + (dx / d) * NODE_R, sy = s.y + (dy / d) * NODE_R;
+    const tx = t.x - (dx / d) * NODE_R, ty = t.y - (dy / d) * NODE_R;
+    // Slight curve
+    const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+    const off = Math.min(d * 0.08, 20);
+    const nx = -dy / d * off, ny = dx / d * off;
+    svgHTML += `<path class="link-line link-real" data-src="${esc(l.src)}" data-tgt="${esc(l.tgt)}" d="M${sx},${sy} Q${mx+nx},${my+ny} ${tx},${ty}" stroke="rgba(120,180,240,0.18)" stroke-width="1" fill="none"/>`;
+  });
+
+  // Reachability links (hidden, shown on hover)
+  reachLinks.forEach(l => {
+    const s = topoNodeMap[l.src], t = topoNodeMap[l.tgt];
+    if (!s || !t) return;
+    const dx = t.x-s.x, dy = t.y-s.y, d = Math.sqrt(dx*dx+dy*dy)||1;
+    const sx2 = s.x+(dx/d)*NODE_R, sy2 = s.y+(dy/d)*NODE_R;
+    const tx2 = t.x-(dx/d)*NODE_R, ty2 = t.y-(dy/d)*NODE_R;
+    const mx2=(sx2+tx2)/2, my2=(sy2+ty2)/2;
+    const off2=Math.min(d*0.08,20), nx2=-dy/d*off2, ny2=dx/d*off2;
+    svgHTML += `<path class="link-line link-reach" data-src="${esc(l.src)}" data-tgt="${esc(l.tgt)}" d="M${sx2},${sy2} Q${mx2+nx2},${my2+ny2} ${tx2},${ty2}" stroke="rgba(255,167,38,0.5)" stroke-width="1.5" stroke-dasharray="4,3" fill="none" style="display:none"/>`;
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    svgHTML += `<g class="pod-node" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">`;
+    // Outer ring
+    svgHTML += `<circle class="node-ring" r="${NODE_R}" fill="${n.fillColor}" stroke="${n.ringColor}" stroke-width="3" style="color:${n.ringColor}"/>`;
+    // Clipped icon group so nothing overflows the circle
+    svgHTML += `<g clip-path="url(#node-clip)">`;
+    svgHTML += `<text text-anchor="middle" dy="6" fill="${n.ringColor}" font-family="Material Icons Outlined" font-size="18">${n.icon}</text>`;
+    svgHTML += `</g>`;
+    // Label below
+    const lbl = n.label.length > 20 ? n.label.slice(0, 18) + '\u2026' : n.label;
+    svgHTML += `<text class="node-label" dy="${NODE_R + 16}">${esc(lbl)}</text>`;
+    svgHTML += '</g>';
+  });
+
+  svgHTML += '</g>';
+  svg.innerHTML = svgHTML;
+
+  // ── Interactions ──
+  let isPan = false, panStart = { x: 0, y: 0 };
+  let dragEl = null, dragOff = { x: 0, y: 0 };
+
+  svg.addEventListener('mousedown', e => {
+    const pod = e.target.closest('.pod-node');
+    if (pod) {
+      dragEl = pod;
+      const n = topoNodeMap[pod.dataset.id];
+      if (n) { const p = _svgPt(e); dragOff = { x: p.x - n.x, y: p.y - n.y }; }
+      return;
+    }
+    isPan = true;
+    panStart = { x: e.clientX - topoTransform.x, y: e.clientY - topoTransform.y };
+    svg.style.cursor = 'grabbing';
+  });
+  svg.addEventListener('mousemove', e => {
+    if (dragEl) {
+      const n = topoNodeMap[dragEl.dataset.id]; if (!n) return;
+      const p = _svgPt(e);
+      n.x = p.x - dragOff.x; n.y = p.y - dragOff.y;
+      dragEl.setAttribute('transform', `translate(${n.x},${n.y})`);
+      svg.querySelectorAll('.link-line').forEach(ln => {
+        if (ln.dataset.src === n.id || ln.dataset.tgt === n.id) _updateLink(ln);
+      });
+      return;
+    }
+    if (!isPan) return;
+    topoTransform.x = e.clientX - panStart.x; topoTransform.y = e.clientY - panStart.y;
+    document.getElementById('topo-root').setAttribute('transform', `translate(${topoTransform.x},${topoTransform.y}) scale(${topoTransform.k})`);
+  });
+  svg.addEventListener('mouseup', () => { isPan = false; dragEl = null; svg.style.cursor = 'grab'; });
+  svg.addEventListener('mouseleave', () => { isPan = false; dragEl = null; svg.style.cursor = 'grab'; });
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const f = e.deltaY < 0 ? 1.12 : 0.89;
+    const r = svg.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    topoTransform.x = mx - (mx - topoTransform.x) * f;
+    topoTransform.y = my - (my - topoTransform.y) * f;
+    topoTransform.k *= f;
+    document.getElementById('topo-root').setAttribute('transform', `translate(${topoTransform.x},${topoTransform.y}) scale(${topoTransform.k})`);
+  }, { passive: false });
+
+  // Hover: highlight connections, tooltip
+  const tooltip = document.getElementById('topo-tooltip');
+  svg.querySelectorAll('.pod-node').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const id = el.dataset.id;
+      const sc = topoScores.find(s => s.podName === id); if (!sc) return;
+      const rect = wrap.getBoundingClientRect(), er = el.getBoundingClientRect();
+      tooltip.style.display = 'block';
+      tooltip.style.left = (er.right - rect.left + 10) + 'px';
+      tooltip.style.top = (er.top - rect.top - 10) + 'px';
+      const reach = blastCount(sc.blast);
+      tooltip.innerHTML = `<div style="border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:6px;margin-bottom:6px"><b style="color:${RING_COLORS[sc.tier]}">${esc(shortPod(id))}</b></div>`
+        + `<div style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px">`
+        + `<span style="color:#718096">Score</span><span>${sc.total} <span style="color:${RING_COLORS[sc.tier]}">${sc.tier}</span></span>`
+        + `<span style="color:#718096">CVEs</span><span style="color:#ef5350">${sc.vulns.critical}C</span>`
+        + `<span style="color:#718096">Blast</span><span>${reach} service${reach!==1?'s':''}</span>`
+        + `<span style="color:#718096">NetPol</span><span style="color:${sc.blast.hasNetworkPolicy?'#66bb6a':'#ffa726'}">${sc.blast.hasNetworkPolicy?'Enforced':'None'}</span>`
+        + `</div>`;
+      // Brighten real connections, show reachability links
+      const conn = new Set([id]);
+      // Real connections: brighten
+      svg.querySelectorAll('.link-real').forEach(ln => {
+        const mine = ln.dataset.src === id || ln.dataset.tgt === id;
+        if (mine) {
+          ln.style.stroke = RING_COLORS[sc.tier];
+          ln.style.strokeWidth = '2.5';
+          ln.style.strokeOpacity = '0.8';
+          conn.add(ln.dataset.src); conn.add(ln.dataset.tgt);
+        } else {
+          ln.style.strokeOpacity = '0.05';
+        }
+      });
+      // Reachability links: show for this pod
+      svg.querySelectorAll('.link-reach').forEach(ln => {
+        const mine = ln.dataset.src === id || ln.dataset.tgt === id;
+        if (mine) {
+          ln.style.display = '';
+          conn.add(ln.dataset.src); conn.add(ln.dataset.tgt);
+        }
+      });
+      svg.querySelectorAll('.pod-node').forEach(pn => { pn.style.opacity = conn.has(pn.dataset.id) ? '1' : '0.18'; });
+    });
+    el.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+      svg.querySelectorAll('.link-real').forEach(ln => { ln.style.stroke = 'rgba(120,180,240,0.18)'; ln.style.strokeWidth = '1'; ln.style.strokeOpacity = '1'; });
+      svg.querySelectorAll('.link-reach').forEach(ln => { ln.style.display = 'none'; });
+      svg.querySelectorAll('.pod-node').forEach(pn => { pn.style.opacity = '1'; });
+    });
+    el.addEventListener('click', () => selectTopoPod(el.dataset.id));
+  });
 
   if (!S.selectedPod || !topoScores.find(s => s.podName === S.selectedPod)) {
     S.selectedPod = topoScores.length ? topoScores[0].podName : null;
@@ -1460,15 +2050,41 @@ function renderTopology() {
   if (S.selectedPod) selectTopoPod(S.selectedPod);
 }
 
+function _svgPt(e) {
+  const svg = document.getElementById('topo-svg');
+  return { x: (e.clientX - svg.getBoundingClientRect().left - topoTransform.x) / topoTransform.k,
+           y: (e.clientY - svg.getBoundingClientRect().top - topoTransform.y) / topoTransform.k };
+}
+function _updateLink(ln) {
+  const s = topoNodeMap[ln.dataset.src], t = topoNodeMap[ln.dataset.tgt];
+  if (!s || !t) return;
+  const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx*dx+dy*dy)||1;
+  const sx = s.x+(dx/d)*NODE_R, sy = s.y+(dy/d)*NODE_R;
+  const tx = t.x-(dx/d)*NODE_R, ty = t.y-(dy/d)*NODE_R;
+  const mx = (sx+tx)/2, my = (sy+ty)/2;
+  const off = Math.min(d*0.08,20), nx = -dy/d*off, ny = dx/d*off;
+  ln.setAttribute('d', `M${sx},${sy} Q${mx+nx},${my+ny} ${tx},${ty}`);
+}
+function topoZoom(f) {
+  const svg = document.getElementById('topo-svg');
+  const W = svg.clientWidth/2, H = svg.clientHeight/2;
+  topoTransform.x = W-(W-topoTransform.x)*f; topoTransform.y = H-(H-topoTransform.y)*f;
+  topoTransform.k *= f;
+  document.getElementById('topo-root').setAttribute('transform', `translate(${topoTransform.x},${topoTransform.y}) scale(${topoTransform.k})`);
+}
+function topoFitAll() { renderTopology(); }
+
 function selectTopoPod(podName) {
   S.selectedPod = podName;
   const score = topoScores.find(s => s.podName === podName);
   if (!score) return;
 
-  // Highlight selected pod in grid
-  document.querySelectorAll('.topo-pod').forEach(el => {
-    el.classList.toggle('topo-pod-selected', el.dataset.pod === podName);
-  });
+  // Highlight selected node in SVG
+  document.querySelectorAll('#topo-svg .pod-node circle').forEach(c => { c.style.strokeWidth = ''; });
+  const selNode = document.querySelector(`#topo-svg .pod-node[data-id="${CSS.escape(podName)}"]`);
+  if (selNode) {
+    selNode.querySelectorAll('circle').forEach(c => { if (c.getAttribute('r') > 5) c.style.strokeWidth = '3'; });
+  }
 
   document.getElementById('topo-detail').style.display = '';
   document.getElementById('topo-detail-title').textContent = shortPod(podName);
@@ -1483,7 +2099,6 @@ function selectTopoPod(podName) {
   const rc = blastCount(score.blast);
 
   let blastHTML = '';
-  // Show configured targets
   if (configured.length) {
     blastHTML += configured.map(t => {
       const isDs = dataStores.includes(t);
@@ -1492,7 +2107,6 @@ function selectTopoPod(podName) {
       return `<div class="blast-item"><span class="mi" style="color:var(--primary-light)">${icon}</span><div class="target">${esc(t)}</div><div>${tag}</div></div>`;
     }).join('');
   }
-  // Show full reachable targets if available
   if (targets.length > 0) {
     const extra = targets.filter(t => !configured.includes(t));
     blastHTML += extra.map(t => {
@@ -1510,7 +2124,6 @@ function selectTopoPod(podName) {
   if (!blastHTML) {
     blastHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:8px">No reachable targets (fully isolated)</div>`;
   }
-  // Network policy status
   blastHTML = `<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
     <span class="mi" style="font-size:16px;color:${score.blast.hasNetworkPolicy ? 'var(--success)' : 'var(--warning)'}">shield</span>
     <span style="font-size:13px;color:${score.blast.hasNetworkPolicy ? 'var(--success)' : 'var(--warning)'}">Network Policy: ${score.blast.hasNetworkPolicy ? 'Enforced' : 'NONE'}</span>
@@ -1518,7 +2131,7 @@ function selectTopoPod(podName) {
   </div>` + blastHTML;
   blastEl.innerHTML = blastHTML;
 
-  // CVE list (filtered by In Use toggle)
+  // CVE list
   const allCves = score.vulns.topCVEs || [];
   const cves = S.inUseOnly ? allCves.filter(c => c.inUse) : allCves;
   document.getElementById('topo-cve-list').innerHTML = cves.length ? cves.map(c => {

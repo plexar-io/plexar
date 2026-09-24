@@ -47,6 +47,7 @@ var (
 	hubbleRelayAddr string
 	serveVulnSource string
 	loadFile        string
+	apiToken        string
 )
 
 var serveCmd = &cobra.Command{
@@ -73,6 +74,7 @@ func init() {
 	serveCmd.Flags().StringVar(&hubbleRelayAddr, "hubble-relay", "", "Hubble Relay address (host:port); auto-detect if empty")
 	serveCmd.Flags().StringVar(&serveVulnSource, "vuln-source", "trivy", "Vulnerability source: trivy, trivy-operator, none")
 	serveCmd.Flags().StringVar(&loadFile, "load", "", "Load scan results from a JSON file (skip live scanning)")
+	serveCmd.Flags().StringVar(&apiToken, "api-token", "", "Static bearer token for API authentication (env: PLEXAR_API_TOKEN)")
 }
 
 // Scan cache — background loop writes, API handlers read
@@ -160,6 +162,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "📦 Evidence sink enabled: %s\n", sink.Name())
 	}
 
+	// Resolve API token: flag takes priority, then env var
+	if apiToken == "" {
+		apiToken = os.Getenv("PLEXAR_API_TOKEN")
+	}
+
 	// Auth middleware
 	var authMiddleware func(http.Handler) http.Handler
 	var err error
@@ -169,6 +176,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("OIDC setup failed: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "🔐 OIDC auth enabled (%s)\n", oidcIssuer)
+	} else if apiToken != "" {
+		authMiddleware = auth.NewTokenMiddleware(apiToken)
+		fmt.Fprintf(os.Stderr, "🔐 API token auth enabled\n")
 	} else {
 		authMiddleware = auth.NoopMiddleware()
 	}
